@@ -609,19 +609,27 @@ function mapBilingualTmdbToMovieItem(rawEn: any, rawUk: any): MovieItem {
     ? parseInt(String(rawEn.release_date).slice(0, 4), 10)
     : 2024;
 
-  const genresUk: string[] = Array.isArray(rawEn.genre_ids)
+  const genreIds: number[] = Array.isArray(rawEn.genre_ids)
     ? rawEn.genre_ids
-        .map((gid: number) => TMDB_GENRE_MAP_UK[gid])
-        .filter(Boolean)
-        .slice(0, 3)
-    : ['Кіно'];
+    : Array.isArray(rawEn.genres)
+    ? rawEn.genres.map((g: any) => g.id).filter(Boolean)
+    : [];
 
-  const genresEn: string[] = Array.isArray(rawEn.genre_ids)
-    ? rawEn.genre_ids
-        .map((gid: number) => TMDB_GENRE_MAP_EN[gid])
-        .filter(Boolean)
-        .slice(0, 3)
-    : ['Movie'];
+  const genresUk: string[] =
+    genreIds.length > 0
+      ? genreIds
+          .map((gid: number) => TMDB_GENRE_MAP_UK[gid])
+          .filter(Boolean)
+          .slice(0, 3)
+      : ['Кіно'];
+
+  const genresEn: string[] =
+    genreIds.length > 0
+      ? genreIds
+          .map((gid: number) => TMDB_GENRE_MAP_EN[gid])
+          .filter(Boolean)
+          .slice(0, 3)
+      : ['Movie'];
 
   const ratings = resolveCrossPlatformRatings(
     rawEn.id,
@@ -629,18 +637,18 @@ function mapBilingualTmdbToMovieItem(rawEn: any, rawUk: any): MovieItem {
     rawEn.vote_count || 500
   );
 
-  const posterFile = rawEn.poster_path || rawUk.poster_path;
-  const backdropFile = rawEn.backdrop_path || rawUk.backdrop_path;
+  const posterFile = rawEn.poster_path || rawUk?.poster_path;
+  const backdropFile = rawEn.backdrop_path || rawUk?.backdrop_path;
 
   return {
     id: `tmdb-${rawEn.id}`,
     tmdbId: rawEn.id,
     imdbId: ratings.imdb.imdbId || `tt${rawEn.id}`,
     titleEn: rawEn.title || rawEn.original_title || 'Untitled',
-    titleUk: rawUk.title || rawEn.title || 'Без назви',
+    titleUk: rawUk?.title || rawEn.title || 'Без назви',
     originalTitle: rawEn.original_title || rawEn.title,
     releaseYear: year,
-    runtime: 120,
+    runtime: rawEn.runtime || 120,
     genresUk: genresUk.length > 0 ? genresUk : ['Кіно'],
     genresEn: genresEn.length > 0 ? genresEn : ['Movie'],
     directorUk: 'TMDb',
@@ -648,7 +656,7 @@ function mapBilingualTmdbToMovieItem(rawEn: any, rawUk: any): MovieItem {
     castUk: [],
     castEn: [],
     overviewUk:
-      rawUk.overview ||
+      rawUk?.overview ||
       rawEn.overview ||
       'Опис із бази The Movie Database (TMDb).',
     overviewEn:
@@ -663,6 +671,39 @@ function mapBilingualTmdbToMovieItem(rawEn: any, rawUk: any): MovieItem {
   };
 }
 
+export async function fetchMovieByTmdbId(
+  tmdbId: number,
+  apiKey?: string
+): Promise<MovieItem | null> {
+  if (!tmdbId || !apiKey || apiKey.trim().length <= 5) {
+    return null;
+  }
+
+  try {
+    const enUrl = appendApiKeyParam(
+      `${TMDB_BASE_URL}/movie/${tmdbId}?language=en-US`,
+      apiKey
+    );
+    const ukUrl = appendApiKeyParam(
+      `${TMDB_BASE_URL}/movie/${tmdbId}?language=uk-UA`,
+      apiKey
+    );
+
+    const [enRes, ukRes] = await Promise.all([
+      fetch(enUrl, { headers: buildAuthHeaders(apiKey) }),
+      fetch(ukUrl, { headers: buildAuthHeaders(apiKey) }),
+    ]);
+
+    if (!enRes.ok) return null;
+
+    const detailEn = await enRes.json();
+    const detailUk = ukRes.ok ? await ukRes.json() : detailEn;
+    return mapBilingualTmdbToMovieItem(detailEn, detailUk);
+  } catch {
+    return null;
+  }
+}
+
 export function calculateCompositeScore(ratings: MovieRatings): number {
   const imdbNorm = ratings.imdb.score * 10;
   const rtNorm = ratings.rottenTomatoes.tomatometer;
@@ -670,3 +711,4 @@ export function calculateCompositeScore(ratings: MovieRatings): number {
   const tmdbNorm = ratings.tmdb.score * 10;
   return Math.round((imdbNorm + rtNorm + lbNorm + tmdbNorm) / 4);
 }
+

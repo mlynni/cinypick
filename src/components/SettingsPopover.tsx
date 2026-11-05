@@ -88,6 +88,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
   // Session Hash Export & Import state
   const [sessionCodeInput, setSessionCodeInput] = useState<string>('');
   const [copiedSessionHash, setCopiedSessionHash] = useState<boolean>(false);
+  const [loadingSessionHash, setLoadingSessionHash] = useState<boolean>(false);
   const [sessionStatus, setSessionStatus] = useState<{
     ok: boolean;
     message: string;
@@ -263,7 +264,11 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
   const handleCopySessionHash = async () => {
     setSessionStatus(null);
     try {
-      const hash = await encodeSessionHash(myMovies, wishlistMovies);
+      const hash = await encodeSessionHash(
+        myMovies,
+        wishlistMovies,
+        apiKey.trim()
+      );
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(hash);
       } else {
@@ -280,10 +285,26 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
   };
 
   const handleLoadSessionHash = async () => {
-    if (!sessionCodeInput.trim()) return;
+    if (!sessionCodeInput.trim() || loadingSessionHash) return;
     setSessionStatus(null);
+    setLoadingSessionHash(true);
     try {
-      const decoded = await decodeSessionHash(sessionCodeInput);
+      const decoded = await decodeSessionHash(
+        sessionCodeInput,
+        apiKey.trim()
+      );
+      if (decoded.apiKey && decoded.apiKey.trim().length > 5) {
+        const nextKey = decoded.apiKey.trim();
+        setApiKey(nextKey);
+        setIsTmdbExpanded(false);
+        onSaveTmdbConfig({
+          ...tmdbConfig,
+          mode: 'custom',
+          customApiKey: nextKey,
+          language,
+          lastSyncStatus: 'connected',
+        });
+      }
       onImportSessionLists(decoded.myMovies, decoded.wishlistMovies);
       setSessionCodeInput('');
       setSessionStatus({
@@ -298,6 +319,8 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
         ok: false,
         message: t.sessionLoadError,
       });
+    } finally {
+      setLoadingSessionHash(false);
     }
   };
 
@@ -703,11 +726,15 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
             />
             <button
               type="button"
-              disabled={!sessionCodeInput.trim()}
+              disabled={!sessionCodeInput.trim() || loadingSessionHash}
               onClick={handleLoadSessionHash}
               className="px-3.5 py-2 rounded-xl bg-[var(--bg-subcard)] hover:opacity-85 disabled:opacity-40 border border-[var(--border-subtle)] text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-opacity cursor-pointer disabled:cursor-not-allowed"
             >
-              <Download className="w-3.5 h-3.5" />
+              {loadingSessionHash ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
               <span>{t.sessionLoadBtn}</span>
             </button>
           </div>
