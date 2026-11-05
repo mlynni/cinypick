@@ -14,6 +14,9 @@ import {
   Film,
   Plus,
   ChevronDown,
+  Copy,
+  Download,
+  ArrowRightLeft,
 } from 'lucide-react';
 import {
   AppLanguage,
@@ -29,16 +32,23 @@ import {
   testTmdbApiKey,
 } from '../services/tmdbService';
 import { getMovieAltTitle, getMovieTitle, UI_TEXT } from '../utils/i18n';
+import { decodeSessionHash, encodeSessionHash } from '../utils/sessionHash';
 
 interface SettingsPopoverProps {
   isOpen: boolean;
   colorTheme: ColorThemeId;
   tmdbConfig: TmdbConfigState;
   secretOverride: SecretOverrideConfig;
+  myMovies: MovieItem[];
+  wishlistMovies: MovieItem[];
   onClose: () => void;
   onChangeColorTheme: (theme: ColorThemeId) => void;
   onSaveTmdbConfig: (config: TmdbConfigState) => void;
   onChangeSecretOverride: (config: SecretOverrideConfig) => void;
+  onImportSessionLists: (
+    importedPool: MovieItem[],
+    importedWishlist: MovieItem[]
+  ) => void;
 }
 
 export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
@@ -46,10 +56,13 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
   colorTheme,
   tmdbConfig,
   secretOverride,
+  myMovies,
+  wishlistMovies,
   onClose,
   onChangeColorTheme,
   onSaveTmdbConfig,
   onChangeSecretOverride,
+  onImportSessionLists,
 }) => {
   const [apiKey, setApiKey] = useState<string>(tmdbConfig.customApiKey || '');
   const [language, setLanguage] = useState<AppLanguage>(tmdbConfig.language);
@@ -72,6 +85,14 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
     String(secretOverride.chancePercent)
   );
 
+  // Session Hash Export & Import state
+  const [sessionCodeInput, setSessionCodeInput] = useState<string>('');
+  const [copiedSessionHash, setCopiedSessionHash] = useState<boolean>(false);
+  const [sessionStatus, setSessionStatus] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
+
   useEffect(() => {
     setApiKey(tmdbConfig.customApiKey || '');
     setLanguage(tmdbConfig.language);
@@ -81,6 +102,8 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
       );
       setIsTmdbExpanded(!hasKey);
       setChanceInputText(String(secretOverride.chancePercent));
+      setCopiedSessionHash(false);
+      setSessionStatus(null);
     }
   }, [
     tmdbConfig.customApiKey,
@@ -235,6 +258,47 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
       ...secretOverride,
       chancePercent: clamped,
     });
+  };
+
+  const handleCopySessionHash = async () => {
+    setSessionStatus(null);
+    try {
+      const hash = await encodeSessionHash(myMovies, wishlistMovies);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(hash);
+      } else {
+        setSessionCodeInput(hash);
+      }
+      setCopiedSessionHash(true);
+      setTimeout(() => setCopiedSessionHash(false), 2200);
+    } catch {
+      setSessionStatus({
+        ok: false,
+        message: t.sessionLoadError,
+      });
+    }
+  };
+
+  const handleLoadSessionHash = async () => {
+    if (!sessionCodeInput.trim()) return;
+    setSessionStatus(null);
+    try {
+      const decoded = await decodeSessionHash(sessionCodeInput);
+      onImportSessionLists(decoded.myMovies, decoded.wishlistMovies);
+      setSessionCodeInput('');
+      setSessionStatus({
+        ok: true,
+        message:
+          language === 'en-US'
+            ? `Loaded: ${decoded.myMovies.length} movies, ${decoded.wishlistMovies.length} in wishlist.`
+            : `Завантажено: ${decoded.myMovies.length} у фільмах, ${decoded.wishlistMovies.length} у списку бажаного.`,
+      });
+    } catch {
+      setSessionStatus({
+        ok: false,
+        message: t.sessionLoadError,
+      });
+    }
   };
 
   const handleSave = () => {
@@ -592,6 +656,76 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
                   <span>{testResult.message}</span>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* 5. Compact Session Code (Hash) Transfer Block */}
+        <div className="space-y-2.5 pt-3 border-t border-[var(--border-subtle)]">
+          <div className="flex items-center justify-between">
+            <span className="font-sans text-[11px] font-bold tracking-wider uppercase text-[var(--text-muted)] flex items-center gap-1.5">
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              <span>{t.sessionCodeLabel}</span>
+            </span>
+          </div>
+
+          <button
+            type="button"
+            disabled={myMovies.length === 0 && wishlistMovies.length === 0}
+            onClick={handleCopySessionHash}
+            className={`w-full py-2.5 px-3.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+              copiedSessionHash
+                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                : 'bg-[var(--bg-subcard)] hover:opacity-90 border-[var(--border-subtle)] text-[var(--text-main)]'
+            }`}
+          >
+            {copiedSessionHash ? (
+              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+            ) : (
+              <Copy className="w-3.5 h-3.5" />
+            )}
+            <span>
+              {copiedSessionHash
+                ? t.sessionCopiedBtn
+                : myMovies.length === 0 && wishlistMovies.length === 0
+                ? t.sessionEmptyHint
+                : t.sessionCopyBtn}
+            </span>
+          </button>
+
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              value={sessionCodeInput}
+              onChange={(e) => setSessionCodeInput(e.target.value)}
+              placeholder={t.sessionPastePlaceholder}
+              className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] font-mono placeholder:font-sans placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
+            />
+            <button
+              type="button"
+              disabled={!sessionCodeInput.trim()}
+              onClick={handleLoadSessionHash}
+              className="px-3.5 py-2 rounded-xl bg-[var(--bg-subcard)] hover:opacity-85 disabled:opacity-40 border border-[var(--border-subtle)] text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-opacity cursor-pointer disabled:cursor-not-allowed"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{t.sessionLoadBtn}</span>
+            </button>
+          </div>
+
+          {sessionStatus && (
+            <div
+              className={`flex items-start gap-1.5 p-2 rounded-xl text-[11px] ${
+                sessionStatus.ok
+                  ? 'bg-emerald-500/15 text-emerald-400'
+                  : 'bg-rose-500/15 text-rose-400'
+              }`}
+            >
+              {sessionStatus.ok ? (
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              ) : (
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              )}
+              <span>{sessionStatus.message}</span>
             </div>
           )}
         </div>

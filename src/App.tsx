@@ -583,6 +583,59 @@ export default function App() {
     }
   };
 
+  // Merge imported session movies and wishlist with existing items (updating status & ratings on ID match)
+  const handleImportSessionLists = (
+    importedPool: MovieItem[],
+    importedWishlist: MovieItem[]
+  ) => {
+    if (importedPool.length > 0) {
+      setMyMovies((prev) => {
+        const importedMap = new Map<string, MovieItem>();
+        importedPool.forEach((m) => importedMap.set(m.id, m));
+
+        const updatedExisting = prev.map((existing) => {
+          const match = importedMap.get(existing.id);
+          if (!match) return existing;
+          importedMap.delete(existing.id);
+          return {
+            ...existing,
+            isChosen: match.isChosen,
+            isWatched: match.isWatched,
+            excludeFromRoulette: match.excludeFromRoulette,
+            userRating:
+              typeof match.userRating === 'number'
+                ? match.userRating
+                : existing.userRating,
+          };
+        });
+
+        return [...Array.from(importedMap.values()), ...updatedExisting];
+      });
+    }
+
+    if (importedWishlist.length > 0) {
+      setWishlistMovies((prev) => {
+        const importedMap = new Map<string, MovieItem>();
+        importedWishlist.forEach((m) => importedMap.set(m.id, m));
+
+        const updatedExisting = prev.map((existing) => {
+          const match = importedMap.get(existing.id);
+          if (!match) return existing;
+          importedMap.delete(existing.id);
+          return {
+            ...existing,
+            userRating:
+              typeof match.userRating === 'number'
+                ? match.userRating
+                : existing.userRating,
+          };
+        });
+
+        return [...Array.from(importedMap.values()), ...updatedExisting];
+      });
+    }
+  };
+
   const handleOpenMovieDetail = async (
     movie: MovieItem,
     autoPlayTrailer = false
@@ -1385,10 +1438,13 @@ export default function App() {
         colorTheme={colorTheme}
         tmdbConfig={tmdbConfig}
         secretOverride={secretOverride}
+        myMovies={myMovies}
+        wishlistMovies={wishlistMovies}
         onClose={() => setIsSettingsPopoverOpen(false)}
         onChangeColorTheme={setColorTheme}
         onSaveTmdbConfig={setTmdbConfig}
         onChangeSecretOverride={setSecretOverride}
+        onImportSessionLists={handleImportSessionLists}
       />
 
       {/* Dedicated Advanced Search & Filters Modal */}

@@ -190,6 +190,13 @@ export const UI_TEXT = {
     sortYearOldest: 'Старіші ↑',
     resetFilterBtn: 'Скинути',
     noMoviesMatchFilter: 'За обраним фільтром фільмів не знайдено',
+    sessionCodeLabel: 'КОД СЕСІЇ (ПЕРЕНЕСЕННЯ СПИСКУ)',
+    sessionCopyBtn: 'Скопіювати код сесії',
+    sessionCopiedBtn: 'Скопійовано!',
+    sessionPastePlaceholder: 'Вставте код сесії сюди...',
+    sessionLoadBtn: 'Завантажити',
+    sessionEmptyHint: 'Спочатку додайте фільми у список',
+    sessionLoadError: 'Невірний або пошкоджений код сесії.',
   },
   'en-US': {
     brand: 'CINEROULETTE',
@@ -300,6 +307,13 @@ export const UI_TEXT = {
     sortYearOldest: 'Oldest ↑',
     resetFilterBtn: 'Reset',
     noMoviesMatchFilter: 'No movies match the selected filter',
+    sessionCodeLabel: 'SESSION CODE (LIST TRANSFER)',
+    sessionCopyBtn: 'Copy session code',
+    sessionCopiedBtn: 'Copied!',
+    sessionPastePlaceholder: 'Paste session code here...',
+    sessionLoadBtn: 'Load',
+    sessionEmptyHint: 'Add movies to your list first',
+    sessionLoadError: 'Invalid or corrupted session code.',
   },
 } as const;
 
