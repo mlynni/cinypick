@@ -1,0 +1,100 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-display: 'Montserrat', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+    /* Default: Monochrome Dark with Crisp White Accents */
+    --bg-page: #09090B;
+    --bg-card: #121216;
+    --bg-subcard: #1A1A20;
+    --text-main: #FAFAFA;
+    --text-muted: #A1A1AA;
+    --accent-primary: #FFFFFF;
+    --accent-secondary: #E4E4E7;
+    --accent-text: #09090B;
+    --border-subtle: rgba(255, 255, 255, 0.09);
+  }
+
+  [data-theme="pure-white"] {
+    --bg-page: #F4F4F5;
+    --bg-card: #FFFFFF;
+    --bg-subcard: #F1F1F4;
+    --text-main: #09090B;
+    --text-muted: #64646E;
+    --accent-primary: #09090B;
+    --accent-secondary: #27272A;
+    --accent-text: #FFFFFF;
+    --border-subtle: rgba(9, 9, 11, 0.09);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-page);
+    color: var(--text-main);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  .font-editorial {
+    font-family: var(--font-sans);
+  }
+
+  .font-mono-tabular {
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* Hide visible scrollbar tracks while preserving smooth scrolling */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Remove ugly default browser number input spinner arrows */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+@keyframes movieCardFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-movie-fade-in {
+  animation: movieCardFadeIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+

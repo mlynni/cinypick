@@ -1,0 +1,6 @@
+{
+  "name": "КіноРулетка — Вибір фільмів з друзями",
+  "description": "Платформа для вибору фільмів на вечір з друзями: рейтинги IMDb, Rotten Tomatoes, Letterboxd, TMDb, інтеграція з TMDb API, фільтри стрімінгів, трейлери та Колесо фортуни.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
