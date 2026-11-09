@@ -32,7 +32,11 @@ import {
   testTmdbApiKey,
 } from '../services/tmdbService';
 import { getMovieAltTitle, getMovieTitle, UI_TEXT } from '../utils/i18n';
-import { decodeSessionHash, encodeSessionHash } from '../utils/sessionHash';
+import {
+  buildSessionShareUrl,
+  decodeSessionHash,
+  encodeSessionHash,
+} from '../utils/sessionHash';
 
 interface SettingsPopoverProps {
   isOpen: boolean;
@@ -269,10 +273,11 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
         wishlistMovies,
         apiKey.trim()
       );
+      const url = buildSessionShareUrl(hash);
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(hash);
+        await navigator.clipboard.writeText(url);
       } else {
-        setSessionCodeInput(hash);
+        setSessionCodeInput(url);
       }
       setCopiedSessionHash(true);
       setTimeout(() => setCopiedSessionHash(false), 2200);
@@ -338,7 +343,11 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-start p-4 sm:p-8 bg-black/60 backdrop-blur-[2px] overflow-y-auto"
-      onClick={handleSave}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          handleSave();
+        }
+      }}
     >
       <div
         className="w-full max-w-md rounded-[26px] bg-[var(--bg-card)] text-[var(--text-main)] border border-[var(--border-subtle)] shadow-2xl p-5 space-y-4 mt-4 sm:ml-6 animate-in fade-in zoom-in-95 duration-150 my-auto"

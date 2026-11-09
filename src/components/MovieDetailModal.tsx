@@ -9,13 +9,17 @@ import {
   Clapperboard,
   Bookmark,
   RotateCcw,
+  Pencil,
 } from 'lucide-react';
 import { AppLanguage, MovieItem, PersonCredit } from '../types/movie';
 import { MultiRatingBar } from './MultiRatingBar';
 import { StarRatingInput } from './StarRatingInput';
 import {
   calculateCompositeScore,
+  fetchMoviePosters,
   fetchPersonMovieCredits,
+  fetchSimilarMovies,
+  TmdbPosterOption,
 } from '../services/tmdbService';
 import {
   getMovieCast,
@@ -34,11 +38,15 @@ interface MovieDetailModalProps {
   autoPlayTrailer?: boolean;
   isInPool: boolean;
   isInWishlist?: boolean;
+  isMovieInPool?: (movieId: string) => boolean;
+  isMovieInWishlist?: (movieId: string) => boolean;
   onClose: () => void;
   onTogglePool: (movie: MovieItem) => void;
+  onAddMovieToPool?: (movie: MovieItem) => void;
   onRestoreToRoulette?: (movie: MovieItem) => void;
   onToggleWishlist?: (movie: MovieItem) => void;
   onRateMovie?: (movieId: string, rating: number | undefined) => void;
+  onChangePoster?: (movieId: string, newPosterUrl: string) => void;
   onSelectMovie?: (movie: MovieItem) => void;
 }
 
@@ -49,11 +57,15 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
   autoPlayTrailer = false,
   isInPool,
   isInWishlist = false,
+  isMovieInPool,
+  isMovieInWishlist,
   onClose,
   onTogglePool,
+  onAddMovieToPool,
   onRestoreToRoulette,
   onToggleWishlist,
   onRateMovie,
+  onChangePoster,
   onSelectMovie,
 }) => {
   const scrollBodyRef = useRef<HTMLDivElement | null>(null);
@@ -61,6 +73,12 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
 
   const [showTrailer, setShowTrailer] = useState<boolean>(autoPlayTrailer);
   const [backdropError, setBackdropError] = useState<boolean>(false);
+
+  // Poster Picker state
+  const [isPosterPickerOpen, setIsPosterPickerOpen] = useState<boolean>(false);
+  const [posterOptions, setPosterOptions] = useState<TmdbPosterOption[]>([]);
+  const [loadingPosters, setLoadingPosters] = useState<boolean>(false);
+  const [customPosterUrlInput, setCustomPosterUrlInput] = useState<string>('');
 
   // Selected person (Director or Actor) for viewing their other movies
   const [selectedPerson, setSelectedPerson] = useState<{
@@ -72,15 +90,75 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
   const [loadingPersonMovies, setLoadingPersonMovies] =
     useState<boolean>(false);
 
+  // Similar movies state
+  const [similarMovies, setSimilarMovies] = useState<MovieItem[]>([]);
+  const [loadingSimilar, setLoadingSimilar] = useState<boolean>(false);
+
   useEffect(() => {
     setShowTrailer(autoPlayTrailer);
     setBackdropError(false);
     setSelectedPerson(null);
     setPersonMovies([]);
+    setIsPosterPickerOpen(false);
+    setPosterOptions([]);
+    setCustomPosterUrlInput('');
     if (scrollBodyRef.current) {
       scrollBodyRef.current.scrollTop = 0;
     }
   }, [movie?.id, autoPlayTrailer]);
+
+  // Fetch alternative posters when Poster Picker is opened
+  useEffect(() => {
+    let isCancelled = false;
+    if (!isPosterPickerOpen || !movie) return;
+
+    setLoadingPosters(true);
+    fetchMoviePosters({
+      tmdbId: movie.tmdbId,
+      apiKey: apiKey?.trim(),
+      currentPoster: movie.posterPath,
+    }).then((items) => {
+      if (!isCancelled) {
+        setPosterOptions(items);
+        setLoadingPosters(false);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isPosterPickerOpen, movie?.id, movie?.tmdbId, apiKey]);
+
+  // Automatically load similar movies when a movie detail modal opens
+  useEffect(() => {
+    let isCancelled = false;
+    if (
+      !movie ||
+      movie.id.startsWith('custom-') ||
+      !movie.tmdbId ||
+      !apiKey ||
+      apiKey.trim().length <= 5
+    ) {
+      setSimilarMovies([]);
+      setLoadingSimilar(false);
+      return;
+    }
+
+    setLoadingSimilar(true);
+    fetchSimilarMovies({
+      tmdbId: movie.tmdbId,
+      apiKey: apiKey.trim(),
+    }).then((items) => {
+      if (!isCancelled) {
+        setSimilarMovies(items);
+        setLoadingSimilar(false);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [movie?.id, movie?.tmdbId, apiKey]);
 
   // Smoothly scroll down to the filmography panel whenever a person is clicked or their movies finish loading
   useEffect(() => {
@@ -191,14 +269,18 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
-      onClick={onClose}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         className="relative w-full max-w-5xl bg-[var(--bg-card)] text-[var(--text-main)] border border-[var(--border-subtle)] rounded-[28px] overflow-hidden shadow-2xl my-auto max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Media Header: Backdrop or Embedded YouTube Trailer */}
-        <div className="relative aspect-video w-full bg-zinc-950 shrink-0 overflow-hidden">
+        <div className="relative min-h-[250px] sm:min-h-[300px] aspect-video w-full bg-zinc-950 shrink-0 overflow-hidden">
           {showTrailer && movie.trailerYoutubeKey ? (
             <iframe
               src={`https://www.youtube-nocookie.com/embed/${movie.trailerYoutubeKey}?autoplay=1&rel=0`}
@@ -269,6 +351,24 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {onChangePoster && (
+                    <button
+                      type="button"
+                      onClick={() => setIsPosterPickerOpen((prev) => !prev)}
+                      aria-label={t.changePosterBtn}
+                      className={`group/btn relative p-3 rounded-xl border transition-colors cursor-pointer ${
+                        isPosterPickerOpen
+                          ? 'bg-white text-black border-white'
+                          : 'bg-black/65 text-white border-white/20 hover:bg-white hover:text-black'
+                      }`}
+                    >
+                      <Pencil className="w-4 h-4" />
+                      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150">
+                        {t.changePosterBtn}
+                      </span>
+                    </button>
+                  )}
+
                   {onToggleWishlist && (
                     <button
                       type="button"
@@ -369,6 +469,113 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
           ref={scrollBodyRef}
           className="p-6 sm:p-8 space-y-7 overflow-y-auto scroll-smooth"
         >
+          {/* Expandable Poster Picker Panel (1 Row of 5 Posters + Custom Image URL) */}
+          {isPosterPickerOpen && onChangePoster && (
+            <div className="p-5 rounded-2xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] space-y-4 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between">
+                <span className="font-display text-base font-bold uppercase tracking-wide flex items-center gap-2">
+                  <Pencil className="w-4 h-4" />
+                  <span>{t.posterPickerTitle}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsPosterPickerOpen(false)}
+                  aria-label="Close"
+                  className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Direct Image URL Input */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const trimmed = customPosterUrlInput.trim();
+                  if (!trimmed) return;
+                  onChangePoster(movie.id, trimmed);
+                  setCustomPosterUrlInput('');
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  type="url"
+                  value={customPosterUrlInput}
+                  onChange={(e) => setCustomPosterUrlInput(e.target.value)}
+                  placeholder={t.posterUrlPlaceholder}
+                  className="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs sm:text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
+                />
+                <button
+                  type="submit"
+                  disabled={!customPosterUrlInput.trim()}
+                  style={{
+                    backgroundColor: 'var(--accent-primary)',
+                    color: 'var(--accent-text)',
+                  }}
+                  className="px-4 py-2.5 rounded-xl font-sans text-xs font-bold uppercase tracking-wider disabled:opacity-40 transition-opacity cursor-pointer shrink-0"
+                >
+                  {t.posterApplyUrlBtn}
+                </button>
+              </form>
+
+              {/* Single Row of 5 Alternative Posters from TMDb */}
+              {loadingPosters ? (
+                <div className="py-6 text-center text-sm text-[var(--text-muted)]">
+                  {t.loadingPosters}
+                </div>
+              ) : posterOptions.length <= 1 &&
+                (!apiKey || apiKey.trim().length <= 5) ? (
+                <div className="py-4 text-center text-xs sm:text-sm text-[var(--text-muted)]">
+                  {t.noPostersFound}
+                </div>
+              ) : (
+                <div className="grid grid-cols-5 gap-3">
+                  {posterOptions.slice(0, 5).map((opt, idx) => {
+                    const isCurrent = movie.posterPath === opt.url;
+                    const langBadge =
+                      opt.lang === 'uk'
+                        ? 'UA'
+                        : opt.lang === 'en'
+                        ? 'EN'
+                        : opt.lang === 'textless'
+                        ? t.posterLangTextless
+                        : '';
+                    return (
+                      <button
+                        key={`${opt.url}-${idx}`}
+                        type="button"
+                        onClick={() => onChangePoster(movie.id, opt.url)}
+                        className={`group relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-zinc-900 border transition-all cursor-pointer ${
+                          isCurrent
+                            ? 'border-[var(--accent-primary)] ring-2 ring-[var(--accent-primary)] scale-[0.98]'
+                            : 'border-[var(--border-subtle)] hover:border-white/40'
+                        }`}
+                      >
+                        <img
+                          src={opt.url}
+                          alt={`${displayTitle} poster ${idx + 1}`}
+                          referrerPolicy="no-referrer"
+                          loading="lazy"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        />
+                        {langBadge && (
+                          <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/75 text-white font-sans text-[9px] font-bold uppercase backdrop-blur-sm">
+                            {langBadge}
+                          </span>
+                        )}
+                        {isCurrent && (
+                          <span className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-emerald-500 text-black flex items-center justify-center shadow-md">
+                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Personal Letterboxd-Style Star Rating (.5 increments) + Restore to Roulette Action if Chosen */}
           {onRateMovie && (
             <div className="p-4 sm:p-5 rounded-2xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-4">
@@ -562,6 +769,139 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                       })}
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Similar Movies Section with Quick Add to Pool & Wishlist Actions */}
+          {(loadingSimilar || similarMovies.length > 0) && (
+            <div className="space-y-4 pt-5 border-t border-[var(--border-subtle)]">
+              <h3 className="font-display text-xl font-bold tracking-wide uppercase">
+                {t.similarMoviesTitle}
+              </h3>
+
+              {loadingSimilar ? (
+                <div className="py-8 text-center text-sm text-[var(--text-muted)]">
+                  {t.loadingSimilarMovies}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3.5">
+                  {similarMovies.map((sm) => {
+                    const smTitle = getMovieTitle(sm, language);
+                    const smInPool = isMovieInPool
+                      ? isMovieInPool(sm.id)
+                      : false;
+                    const smInWishlist = isMovieInWishlist
+                      ? isMovieInWishlist(sm.id)
+                      : false;
+
+                    return (
+                      <div
+                        key={sm.id}
+                        onClick={() => {
+                          if (onSelectMovie) {
+                            onSelectMovie(sm);
+                          }
+                        }}
+                        className="group relative aspect-[2/3] w-full rounded-2xl overflow-hidden bg-[var(--bg-subcard)] border border-[var(--border-subtle)] cursor-pointer hover:border-white/25 transition-all select-none animate-movie-fade-in"
+                      >
+                        {sm.posterPath ? (
+                          <img
+                            src={sm.posterPath}
+                            alt={smTitle}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center">
+                            <Film className="w-6 h-6 text-zinc-500 mb-1.5" />
+                            <span className="font-display text-xs text-white uppercase">
+                              {smTitle}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Top-Right Hover Quick Actions: Add to Movies + Add to Wishlist */}
+                        <div className="absolute top-2 right-2 flex items-center gap-1 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto transition-opacity duration-200">
+                          {onAddMovieToPool && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!smInPool) {
+                                  onAddMovieToPool(sm);
+                                }
+                              }}
+                              aria-label={
+                                smInPool
+                                  ? t.addedToPoolTooltip
+                                  : t.moveToRouletteTitle
+                              }
+                              className={`group/btn w-7.5 h-7.5 rounded-lg backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
+                                smInPool
+                                  ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/25'
+                                  : 'bg-black/75 hover:bg-white text-white hover:text-black border border-white/10'
+                              }`}
+                            >
+                              {smInPool ? (
+                                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                              ) : (
+                                <Plus className="w-3.5 h-3.5" />
+                              )}
+                              <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2 py-0.5 rounded-md bg-[#141419] text-white border border-white/15 text-[10px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150">
+                                {smInPool
+                                  ? t.addedToPoolTooltip
+                                  : t.moveToRouletteTitle}
+                              </span>
+                            </button>
+                          )}
+
+                          {onToggleWishlist && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleWishlist(sm);
+                              }}
+                              aria-label={
+                                smInWishlist
+                                  ? t.removeFromWishlistTitle
+                                  : t.addToWishlistTitle
+                              }
+                              className={`group/btn w-7.5 h-7.5 rounded-lg backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
+                                smInWishlist
+                                  ? 'bg-white text-black shadow-md'
+                                  : 'bg-black/75 hover:bg-white text-white/90 hover:text-black border border-white/10'
+                              }`}
+                            >
+                              <Bookmark
+                                className={`w-3.5 h-3.5 ${
+                                  smInWishlist ? 'fill-current' : ''
+                                }`}
+                              />
+                              <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2 py-0.5 rounded-md bg-[#141419] text-white border border-white/15 text-[10px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150">
+                                {smInWishlist
+                                  ? t.removeFromWishlistTitle
+                                  : t.addToWishlistTitle}
+                              </span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Subtle Bottom Gradient + Title & Year on Hover */}
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 p-2.5 pt-7 bg-gradient-to-t from-black/95 via-black/60 to-transparent">
+                          <div className="font-sans text-xs font-semibold text-white truncate">
+                            {smTitle}
+                          </div>
+                          <div className="font-sans text-[10px] text-white/70 tabular-nums">
+                            {sm.releaseYear}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

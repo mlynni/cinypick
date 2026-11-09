@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   X,
   Search,
@@ -68,6 +68,9 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
   const [yearTo, setYearTo] = useState<number>(CURRENT_YEAR);
   const [minRating, setMinRating] = useState<number>(0);
   const [sortMode, setSortMode] = useState<AdvSortMode>('popularity');
+
+  const yearTrackRef = useRef<HTMLDivElement | null>(null);
+  const activeThumbRef = useRef<'from' | 'to' | 'either' | null>(null);
 
   const [results, setResults] = useState<MovieItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -198,10 +201,113 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
       (CURRENT_YEAR - MIN_YEAR_BOUND)) *
     100;
 
+  const getYearFromClientX = (clientX: number): number => {
+    const track = yearTrackRef.current;
+    if (!track) return CURRENT_YEAR;
+    const rect = track.getBoundingClientRect();
+    if (rect.width <= 0) return CURRENT_YEAR;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return Math.round(
+      MIN_YEAR_BOUND + ratio * (CURRENT_YEAR - MIN_YEAR_BOUND)
+    );
+  };
+
+  const handleYearTrackPointerDown = (
+    e: React.PointerEvent<HTMLDivElement>
+  ) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const targetYear = getYearFromClientX(e.clientX);
+    const low = Math.min(yearFrom, yearTo);
+    const high = Math.max(yearFrom, yearTo);
+
+    if (low === high) {
+      if (targetYear < low) {
+        activeThumbRef.current = 'from';
+        setYearFrom(targetYear);
+        setYearTo(high);
+      } else if (targetYear > high) {
+        activeThumbRef.current = 'to';
+        setYearFrom(low);
+        setYearTo(targetYear);
+      } else {
+        activeThumbRef.current = 'either';
+      }
+      return;
+    }
+
+    const distFrom = Math.abs(targetYear - low);
+    const distTo = Math.abs(targetYear - high);
+
+    if (distFrom <= distTo) {
+      activeThumbRef.current = 'from';
+      setYearFrom(Math.min(targetYear, high));
+      setYearTo(Math.max(targetYear, high));
+    } else {
+      activeThumbRef.current = 'to';
+      setYearFrom(Math.min(low, targetYear));
+      setYearTo(Math.max(low, targetYear));
+    }
+  };
+
+  const handleYearTrackPointerMove = (
+    e: React.PointerEvent<HTMLDivElement>
+  ) => {
+    if (!activeThumbRef.current) return;
+    const targetYear = getYearFromClientX(e.clientX);
+    const low = Math.min(yearFrom, yearTo);
+    const high = Math.max(yearFrom, yearTo);
+
+    if (activeThumbRef.current === 'either') {
+      if (targetYear < low) {
+        activeThumbRef.current = 'from';
+        setYearFrom(targetYear);
+      } else if (targetYear > high) {
+        activeThumbRef.current = 'to';
+        setYearTo(targetYear);
+      }
+      return;
+    }
+
+    if (activeThumbRef.current === 'from') {
+      if (targetYear <= high) {
+        setYearFrom(targetYear);
+      } else {
+        activeThumbRef.current = 'to';
+        setYearFrom(high);
+        setYearTo(targetYear);
+      }
+    } else if (activeThumbRef.current === 'to') {
+      if (targetYear >= low) {
+        setYearTo(targetYear);
+      } else {
+        activeThumbRef.current = 'from';
+        setYearTo(low);
+        setYearFrom(targetYear);
+      }
+    }
+  };
+
+  const handleYearTrackPointerUp = () => {
+    activeThumbRef.current = null;
+  };
+
+  const handleYearTrackDoubleClick = (
+    e: React.MouseEvent<HTMLDivElement>
+  ) => {
+    const targetYear = getYearFromClientX(e.clientX);
+    activeThumbRef.current = null;
+    setYearFrom(targetYear);
+    setYearTo(targetYear);
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-xs overflow-y-auto"
-      onClick={onClose}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         className="w-full max-w-5xl rounded-[28px] bg-[var(--bg-card)] text-[var(--text-main)] border border-[var(--border-subtle)] shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150"
@@ -343,16 +449,28 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                     {t.advFilterYears}
                   </span>
                   <span className="font-sans tabular-nums text-xs font-bold px-2.5 py-0.5 rounded-lg bg-[var(--bg-subcard)] text-[var(--text-main)]">
-                    {Math.min(yearFrom, yearTo)} — {Math.max(yearFrom, yearTo)}
+                    {yearFrom === yearTo
+                      ? yearFrom
+                      : `${Math.min(yearFrom, yearTo)} — ${Math.max(yearFrom, yearTo)}`}
                   </span>
                 </div>
 
-                <div className="h-9 px-3 rounded-xl bg-[var(--bg-subcard)] flex items-center">
-                  <div className="relative w-full h-full flex items-center select-none">
+                <div
+                  onPointerDown={handleYearTrackPointerDown}
+                  onPointerMove={handleYearTrackPointerMove}
+                  onPointerUp={handleYearTrackPointerUp}
+                  onPointerCancel={handleYearTrackPointerUp}
+                  onDoubleClick={handleYearTrackDoubleClick}
+                  className="h-9 px-3.5 rounded-xl bg-[var(--bg-subcard)] flex items-center cursor-pointer touch-none select-none"
+                >
+                  <div
+                    ref={yearTrackRef}
+                    className="relative w-full h-full flex items-center"
+                  >
                     <div className="w-full h-1.5 rounded-full bg-[var(--bg-card)]" />
 
                     <div
-                      className="absolute h-1.5 rounded-full"
+                      className="absolute h-1.5 rounded-full pointer-events-none"
                       style={{
                         left: `${leftPercent}%`,
                         width: `${Math.max(0, rightPercent - leftPercent)}%`,
@@ -360,30 +478,16 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                       }}
                     />
 
-                    <input
-                      type="range"
-                      min={MIN_YEAR_BOUND}
-                      max={CURRENT_YEAR}
-                      step={1}
-                      value={yearFrom}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setYearFrom(Math.min(val, yearTo));
-                      }}
-                      className="pointer-events-none absolute inset-0 w-full h-full appearance-none bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-black [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-black [&::-moz-range-thumb]:cursor-grab"
+                    {/* Left Thumb */}
+                    <div
+                      className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 border-black shadow-md transition-transform duration-75"
+                      style={{ left: `${leftPercent}%` }}
                     />
 
-                    <input
-                      type="range"
-                      min={MIN_YEAR_BOUND}
-                      max={CURRENT_YEAR}
-                      step={1}
-                      value={yearTo}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setYearTo(Math.max(val, yearFrom));
-                      }}
-                      className="pointer-events-none absolute inset-0 w-full h-full appearance-none bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-black [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-black [&::-moz-range-thumb]:cursor-grab"
+                    {/* Right Thumb */}
+                    <div
+                      className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 border-black shadow-md transition-transform duration-75"
+                      style={{ left: `${rightPercent}%` }}
                     />
                   </div>
                 </div>
@@ -639,7 +743,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                     )}
 
                     {/* Top-Right Hover Action Icons (Add to Pool + Wishlist) */}
-                    <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity duration-200">
+                    <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto transition-opacity duration-200">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -649,7 +753,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                         aria-label={
                           inPool ? t.addedToPoolTooltip : t.moveToRouletteTitle
                         }
-                        className={`group/btn relative w-8.5 h-8.5 rounded-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
+                        className={`group/btn w-8.5 h-8.5 rounded-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
                           inPool
                             ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/25'
                             : 'bg-black/75 hover:bg-white text-white hover:text-black border border-white/10'
@@ -678,7 +782,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                             ? t.removeFromWishlistTitle
                             : t.addToWishlistTitle
                         }
-                        className={`group/btn relative w-8.5 h-8.5 rounded-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
+                        className={`group/btn w-8.5 h-8.5 rounded-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
                           inWishlist
                             ? 'bg-white text-black shadow-md'
                             : 'bg-black/75 hover:bg-white text-white/90 hover:text-black border border-white/10'

@@ -38,6 +38,9 @@ export const MovieCard: React.FC<MovieCardProps> = ({
   const isWatched = Boolean(movie.isWatched);
   // Movies in Wishlist are always full-color; in the Movies pool, "Переглянуто" or "Обрано" turns poster B&W
   const isBwPoster = !isWishlistView && (isChosen || isWatched);
+  const weight = movie.rouletteWeight || 1;
+  const showWeightBadge =
+    !isWishlistView && !isChosen && !isWatched && weight > 1;
 
   return (
     <article
@@ -72,10 +75,44 @@ export const MovieCard: React.FC<MovieCardProps> = ({
       )}
 
       {/* Subtle Top Vignette on Hover so Action Icons are always crisp */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity duration-200" />
 
-      {/* Top-Right 3 Action Icons — Invisible until mouse hovers over the poster */}
-      <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity duration-200">
+      {/* Top-Left Persistent Status / Weight Indicator (hides on hover so it never collides with top-right buttons on narrow screens) */}
+      {(!isWishlistView && (isChosen || isWatched || showWeightBadge)) && (
+        <div className="pointer-events-none absolute top-3 left-3 z-20 flex items-center gap-1.5 group-hover:opacity-0 transition-opacity duration-150">
+          {(isChosen || isWatched) && (
+            <span className="px-2 py-1 rounded-xl bg-black/80 text-white border border-white/15 backdrop-blur-md font-sans text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-md">
+              {isChosen ? (
+                <>
+                  <Check className="w-3 h-3 stroke-[2.5] text-emerald-400" />
+                  <span>{t.chosenStatusLabel}</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="w-3 h-3 text-zinc-300" />
+                  <span>{t.watchedStatusLabel}</span>
+                </>
+              )}
+            </span>
+          )}
+          {showWeightBadge && (
+            <span className="px-2 py-0.5 rounded-lg bg-amber-500/90 text-black font-sans text-[10px] font-extrabold tabular-nums shadow-md">
+              ×{weight}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Bottom-Left Personal Star Rating Badge (if rated) */}
+      {typeof movie.userRating === 'number' && movie.userRating > 0 && (
+        <div className="pointer-events-none absolute bottom-3 left-3 z-20 px-2 py-0.5 rounded-lg bg-black/80 text-[#00E054] border border-white/15 backdrop-blur-md font-sans text-[11px] font-bold tabular-nums flex items-center gap-1 shadow-md">
+          <span>★</span>
+          <span>{movie.userRating.toFixed(1).replace(/\.0$/, '')}</span>
+        </div>
+      )}
+
+      {/* Top-Right 3 Action Icons — Dropdowns & Tooltips align to right-3 container so they never overflow card edges */}
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto transition-opacity duration-200">
         {/* 1st Icon: Status (Eye / Check with hover menu in Pool view, or Add to Pool in Wishlist view) */}
         {isWishlistView ? (
           onMoveToRoulette && (
@@ -86,7 +123,7 @@ export const MovieCard: React.FC<MovieCardProps> = ({
                 onMoveToRoulette(movie);
               }}
               aria-label={isInPool ? t.addedToPoolTooltip : t.moveToRouletteTitle}
-              className={`group/btn relative w-8.5 h-8.5 rounded-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
+              className={`group/btn w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
                 isInPool
                   ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-md shadow-emerald-500/25'
                   : 'bg-black/75 hover:bg-white text-white/90 hover:text-black border border-white/10'
@@ -105,7 +142,7 @@ export const MovieCard: React.FC<MovieCardProps> = ({
         ) : (
           onSetMovieStatus && (
             <div
-              className="group/status relative"
+              className="group/status"
               onClick={(e) => e.stopPropagation()}
             >
               <button
@@ -121,7 +158,7 @@ export const MovieCard: React.FC<MovieCardProps> = ({
                 aria-label={
                   isChosen ? t.chosenStatusLabel : t.watchedStatusLabel
                 }
-                className={`w-8.5 h-8.5 rounded-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
+                className={`w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
                   isWatched || isChosen
                     ? 'bg-white text-black shadow-md'
                     : 'bg-black/75 hover:bg-white text-white/90 hover:text-black border border-white/10'
@@ -134,9 +171,9 @@ export const MovieCard: React.FC<MovieCardProps> = ({
                 )}
               </button>
 
-              {/* Hover Choice Dropdown: Переглянуто (Eye) vs Обрано (Check) */}
+              {/* Hover Choice Dropdown: Aligned with the 3-button group so it stays 100% inside the card */}
               <div className="pt-1.5 absolute top-full right-0 z-30 opacity-0 pointer-events-none translate-y-1 scale-95 group-hover/status:opacity-100 group-hover/status:pointer-events-auto group-hover/status:translate-y-0 group-hover/status:scale-100 transition-all duration-150 origin-top-right">
-                <div className="p-1 rounded-xl bg-[#141419]/95 backdrop-blur-md border border-white/15 shadow-2xl flex flex-col gap-0.5 min-w-[132px]">
+                <div className="p-1 rounded-xl bg-[#141419]/95 backdrop-blur-md border border-white/15 shadow-2xl flex flex-col gap-0.5 min-w-[116px]">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -190,7 +227,7 @@ export const MovieCard: React.FC<MovieCardProps> = ({
           aria-label={
             isInWishlist ? t.removeFromWishlistTitle : t.addToWishlistTitle
           }
-          className={`group/btn relative w-8.5 h-8.5 rounded-xl backdrop-blur-md flex items-center justify-center transition-colors cursor-pointer ${
+          className={`group/btn w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-xl backdrop-blur-md flex items-center justify-center transition-colors cursor-pointer ${
             isInWishlist
               ? 'bg-white text-black shadow-md'
               : 'bg-black/75 hover:bg-white text-white/90 hover:text-black border border-white/10'
@@ -212,7 +249,7 @@ export const MovieCard: React.FC<MovieCardProps> = ({
             onRemove(movie.id);
           }}
           aria-label={t.deleteMovieTitle}
-          className="group/btn relative w-8.5 h-8.5 rounded-xl bg-black/75 hover:bg-rose-600 text-white/90 hover:text-white border border-white/10 hover:border-rose-500 backdrop-blur-md flex items-center justify-center transition-colors cursor-pointer"
+          className="group/btn w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-xl bg-black/75 hover:bg-rose-600 text-white/90 hover:text-white border border-white/10 hover:border-rose-500 backdrop-blur-md flex items-center justify-center transition-colors cursor-pointer"
         >
           <Trash2 className="w-4 h-4" />
           <span className="pointer-events-none absolute top-full right-0 mt-2 px-2.5 py-1 rounded-lg bg-[#141419] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150">

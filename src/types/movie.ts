@@ -65,6 +65,8 @@ export interface MovieItem {
   isWatched?: boolean; // Переглянутий фільм (Ч/Б у списку фільмів, іконка ока)
   excludeFromRoulette?: boolean; // Залишити у списку фільмів, але прибрати з рулетки
   userRating?: number; // Особиста оцінка користувача (0.5–5.0)
+  rouletteWeight?: number; // Вага (множник шансу) в рулетці: 1, 2 або 3
+  customPoster?: boolean; // Користувач вручну обрав обкладинку (не перезаписувати при автооновленні)
   // Legacy fallback fields for already stored items
   title?: string;
   originalTitle?: string;

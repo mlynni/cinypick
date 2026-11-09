@@ -1,4 +1,5 @@
 import {
+  CURATED_MOVIES,
   TMDB_GENRE_MAP_EN,
   TMDB_GENRE_MAP_UK,
 } from '../data/curatedMovies';
@@ -180,8 +181,24 @@ export async function searchTmdbForAdding(options: {
   const trimmedQuery = query.trim();
   const validKey = Boolean(apiKey && apiKey.trim().length > 5);
 
-  if (!trimmedQuery || !validKey || !apiKey) {
+  if (!trimmedQuery) {
     return { results: [], hasApiKey: validKey };
+  }
+
+  const searchLocalCurated = (q: string): MovieItem[] => {
+    const lower = q.toLowerCase();
+    return CURATED_MOVIES.filter(
+      (m) =>
+        m.titleUk.toLowerCase().includes(lower) ||
+        m.titleEn.toLowerCase().includes(lower) ||
+        m.directorUk.toLowerCase().includes(lower) ||
+        m.directorEn.toLowerCase().includes(lower) ||
+        String(m.releaseYear).includes(lower)
+    );
+  };
+
+  if (!validKey || !apiKey) {
+    return { results: searchLocalCurated(trimmedQuery), hasApiKey: false };
   }
 
   try {
@@ -506,13 +523,83 @@ export async function fetchTmdbMovieDetails(
       castPeople: castPeople.length > 0 ? castPeople : movie.castPeople,
       imdbId: detailEn.external_ids?.imdb_id || movie.imdbId,
       trailerYoutubeKey: ytTrailer?.key || movie.trailerYoutubeKey,
-      posterPath: enPosterPath
+      posterPath: movie.customPoster
+        ? movie.posterPath
+        : enPosterPath
         ? `${TMDB_IMAGE_BASE_POSTER}${enPosterPath}`
         : movie.posterPath,
+      customPoster: movie.customPoster,
     };
   } catch {
     return movie;
   }
+}
+
+export interface TmdbPosterOption {
+  url: string;
+  lang: 'uk' | 'en' | 'textless' | 'other';
+  voteAverage: number;
+}
+
+/**
+ * Fetch alternative official & artistic posters for a movie from TMDb (`/movie/{id}/images`).
+ */
+export async function fetchMoviePosters(options: {
+  tmdbId?: number;
+  apiKey?: string;
+  currentPoster?: string;
+}): Promise<TmdbPosterOption[]> {
+  const { tmdbId, apiKey, currentPoster } = options;
+  const out: TmdbPosterOption[] = [];
+  const seenUrls = new Set<string>();
+
+  if (currentPoster) {
+    seenUrls.add(currentPoster);
+    out.push({ url: currentPoster, lang: 'en', voteAverage: 10 });
+  }
+
+  if (!tmdbId || tmdbId <= 0 || !apiKey || apiKey.trim().length <= 5) {
+    return out;
+  }
+
+  try {
+    const imgUrl = appendApiKeyParam(
+      `${TMDB_BASE_URL}/movie/${tmdbId}/images?include_image_language=uk,en,null`,
+      apiKey
+    );
+    const res = await fetch(imgUrl, { headers: buildAuthHeaders(apiKey) });
+    if (!res.ok) return out;
+
+    const data = await res.json();
+    const rawPosters: any[] = Array.isArray(data.posters) ? data.posters : [];
+
+    rawPosters.slice(0, 30).forEach((p: any) => {
+      if (!p?.file_path) return;
+      const fullUrl = `${TMDB_IMAGE_BASE_POSTER}${p.file_path}`;
+      if (seenUrls.has(fullUrl)) return;
+      seenUrls.add(fullUrl);
+
+      const iso = p.iso_639_1;
+      const lang: TmdbPosterOption['lang'] =
+        iso === 'uk'
+          ? 'uk'
+          : iso === 'en'
+          ? 'en'
+          : !iso
+          ? 'textless'
+          : 'other';
+
+      out.push({
+        url: fullUrl,
+        lang,
+        voteAverage: Number(p.vote_average || 0),
+      });
+    });
+  } catch {
+    // ignore network errors
+  }
+
+  return out;
 }
 
 /**
@@ -599,6 +686,85 @@ export async function fetchPersonMovieCredits(options: {
       const rawUk = ukMap.get(rawEn.id) || rawEn;
       return mapBilingualTmdbToMovieItem(rawEn, rawUk);
     });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch movies with similar themes/recommendations from TMDb (`/movie/{id}/recommendations` + `/movie/{id}/similar`).
+ */
+export async function fetchSimilarMovies(options: {
+  tmdbId?: number;
+  apiKey?: string;
+}): Promise<MovieItem[]> {
+  const { tmdbId, apiKey } = options;
+  if (!tmdbId || tmdbId <= 0 || !apiKey || apiKey.trim().length <= 5) {
+    return [];
+  }
+
+  try {
+    const recEnUrl = appendApiKeyParam(
+      `${TMDB_BASE_URL}/movie/${tmdbId}/recommendations?language=en-US&page=1`,
+      apiKey
+    );
+    const recUkUrl = appendApiKeyParam(
+      `${TMDB_BASE_URL}/movie/${tmdbId}/recommendations?language=uk-UA&page=1`,
+      apiKey
+    );
+    const simEnUrl = appendApiKeyParam(
+      `${TMDB_BASE_URL}/movie/${tmdbId}/similar?language=en-US&page=1`,
+      apiKey
+    );
+    const simUkUrl = appendApiKeyParam(
+      `${TMDB_BASE_URL}/movie/${tmdbId}/similar?language=uk-UA&page=1`,
+      apiKey
+    );
+
+    const [recEnRes, recUkRes, simEnRes, simUkRes] = await Promise.all([
+      fetch(recEnUrl, { headers: buildAuthHeaders(apiKey) }),
+      fetch(recUkUrl, { headers: buildAuthHeaders(apiKey) }),
+      fetch(simEnUrl, { headers: buildAuthHeaders(apiKey) }),
+      fetch(simUkUrl, { headers: buildAuthHeaders(apiKey) }),
+    ]);
+
+    const recEnData = recEnRes.ok ? await recEnRes.json() : { results: [] };
+    const recUkData = recUkRes.ok ? await recUkRes.json() : { results: [] };
+    const simEnData = simEnRes.ok ? await simEnRes.json() : { results: [] };
+    const simUkData = simUkRes.ok ? await simUkRes.json() : { results: [] };
+
+    const ukMap = new Map<number, any>();
+    [...(recUkData.results || []), ...(simUkData.results || [])].forEach(
+      (item: any) => {
+        if (item?.id && !ukMap.has(item.id)) {
+          ukMap.set(item.id, item);
+        }
+      }
+    );
+
+    const combinedEn: any[] = [
+      ...(recEnData.results || []),
+      ...(simEnData.results || []),
+    ];
+
+    const uniqueMap = new Map<number, any>();
+    combinedEn.forEach((raw: any) => {
+      if (
+        raw?.id &&
+        raw.id !== tmdbId &&
+        raw.poster_path &&
+        !uniqueMap.has(raw.id)
+      ) {
+        uniqueMap.set(raw.id, raw);
+      }
+    });
+
+    return Array.from(uniqueMap.values())
+      .slice(0, 12)
+      .map((rawEn: any) => {
+        const rawUk = ukMap.get(rawEn.id) || rawEn;
+        return mapBilingualTmdbToMovieItem(rawEn, rawUk);
+      });
   } catch {
     return [];
   }

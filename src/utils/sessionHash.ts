@@ -1,4 +1,5 @@
 import { MovieItem, StreamingProviderId } from '../types/movie';
+import { CURATED_MOVIES } from '../data/curatedMovies';
 import {
   createCustomMovieItem,
   fetchMovieByTmdbId,
@@ -280,6 +281,20 @@ async function hydrateCompactItems(
         };
       }
 
+      // Check local curated collection before generic fallback
+      const curatedMatch = CURATED_MOVIES.find(
+        (m) => m.tmdbId === entry.tmdbId
+      );
+      if (curatedMatch) {
+        return {
+          ...curatedMatch,
+          isChosen,
+          isWatched,
+          excludeFromRoulette,
+          userRating: entry.userRating,
+        };
+      }
+
       // Fallback if offline or no API key available
       const ratings = resolveCrossPlatformRatings(entry.tmdbId, 7.2, 500);
       return {
@@ -312,6 +327,27 @@ async function hydrateCompactItems(
   );
 }
 
+export function buildSessionShareUrl(hash: string): string {
+  const baseUrl = `${window.location.origin}${window.location.pathname}`;
+  return `${baseUrl}#s=${encodeURIComponent(hash)}`;
+}
+
+export function extractSessionCodeFromInput(rawInput: string): string {
+  const trimmed = rawInput.trim();
+  if (!trimmed) return '';
+
+  // Support pasting full share links like https://.../#s=K2... or ?s=K2...
+  const hashMatch = trimmed.match(/(?:[#?&]s=)([^&#\s]+)/i);
+  if (hashMatch && hashMatch[1]) {
+    try {
+      return decodeURIComponent(hashMatch[1]).trim();
+    } catch {
+      return hashMatch[1].trim();
+    }
+  }
+  return trimmed;
+}
+
 export async function decodeSessionHash(
   rawInput: string,
   fallbackApiKey?: string
@@ -320,7 +356,7 @@ export async function decodeSessionHash(
   wishlistMovies: MovieItem[];
   apiKey?: string;
 }> {
-  const trimmed = rawInput.trim();
+  const trimmed = extractSessionCodeFromInput(rawInput);
   if (!trimmed) {
     throw new Error('Empty session code');
   }

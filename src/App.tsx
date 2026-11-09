@@ -11,6 +11,7 @@ import {
   SlidersHorizontal,
   ListFilter,
   RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 import {
   ColorThemeId,
@@ -19,11 +20,16 @@ import {
   TmdbConfigState,
   WheelCandidate,
 } from './types/movie';
+import { CURATED_MOVIES } from './data/curatedMovies';
 import {
   createCustomMovieItem,
   fetchTmdbMovieDetails,
   searchTmdbForAdding,
 } from './services/tmdbService';
+import {
+  decodeSessionHash,
+  extractSessionCodeFromInput,
+} from './utils/sessionHash';
 import { MovieCard, MoviePoolStatus } from './components/MovieCard';
 import {
   ImdbIcon,
@@ -227,6 +233,23 @@ export default function App() {
     autoPlayTrailer: boolean;
   } | null>(null);
 
+  // Undo / Notification Toast state
+  const [toastBanner, setToastBanner] = useState<{
+    message: string;
+    onUndo?: () => void;
+  } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+
+  const showToast = (message: string, onUndo?: () => void) => {
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    setToastBanner({ message, onUndo });
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastBanner(null);
+    }, 6000);
+  };
+
   // Close Filter Menu on outside click
   useEffect(() => {
     if (!isFilterMenuOpen) return;
@@ -371,18 +394,18 @@ export default function App() {
     }
 
     if (activeListTab === 'wishlist') {
-      if (!isMovieInWishlist(finalMovie.id)) {
-        setWishlistMovies((prev) =>
-          isMovieInPool(finalMovie.id)
-            ? [...prev, finalMovie]
-            : [finalMovie, ...prev]
-        );
-      }
+      setWishlistMovies((prev) => {
+        if (prev.some((m) => m.id === finalMovie.id)) return prev;
+        return isMovieInPool(finalMovie.id)
+          ? [...prev, finalMovie]
+          : [finalMovie, ...prev];
+      });
     } else {
-      if (!isMovieInPool(finalMovie.id)) {
-        setMyMovies((prev) => [finalMovie, ...prev]);
-        moveWishlistItemToEnd(finalMovie.id);
-      }
+      setMyMovies((prev) => {
+        if (prev.some((m) => m.id === finalMovie.id)) return prev;
+        return [finalMovie, ...prev];
+      });
+      moveWishlistItemToEnd(finalMovie.id);
     }
 
     setSearchQuery('');
@@ -406,10 +429,11 @@ export default function App() {
         excludeFromRoulette: false,
       };
     }
-    if (!isMovieInPool(finalMovie.id)) {
-      setMyMovies((prev) => [finalMovie, ...prev]);
-      moveWishlistItemToEnd(finalMovie.id);
-    }
+    setMyMovies((prev) => {
+      if (prev.some((m) => m.id === finalMovie.id)) return prev;
+      return [finalMovie, ...prev];
+    });
+    moveWishlistItemToEnd(finalMovie.id);
   };
 
   const handleAddCustomTitle = (e: React.FormEvent) => {
@@ -563,23 +587,108 @@ export default function App() {
     );
   };
 
+  // Change movie poster (cover) from TMDb gallery or custom URL
+  const handleChangeMoviePoster = (movieId: string, newPosterUrl: string) => {
+    setMyMovies((prev) =>
+      prev.map((m) =>
+        m.id === movieId
+          ? { ...m, posterPath: newPosterUrl, customPoster: true }
+          : m
+      )
+    );
+    setWishlistMovies((prev) =>
+      prev.map((m) =>
+        m.id === movieId
+          ? { ...m, posterPath: newPosterUrl, customPoster: true }
+          : m
+      )
+    );
+    setSelectedMovieModal((prev) =>
+      prev && prev.movie.id === movieId
+        ? {
+            ...prev,
+            movie: {
+              ...prev.movie,
+              posterPath: newPosterUrl,
+              customPoster: true,
+            },
+          }
+        : prev
+    );
+  };
+
+  // Cycle roulette weight multiplier (1x -> 2x -> 3x -> 1x)
+  const handleToggleCandidateWeight = (movieId: string) => {
+    setMyMovies((prev) =>
+      prev.map((m) => {
+        if (m.id !== movieId) return m;
+        const curr = m.rouletteWeight || 1;
+        const next = curr >= 3 ? 1 : curr + 1;
+        return { ...m, rouletteWeight: next };
+      })
+    );
+  };
+
+  const handleLoadStarterHits = () => {
+    setMyMovies((prev) => {
+      const existingIds = new Set(prev.map((m) => m.id));
+      const toAdd = CURATED_MOVIES.filter((m) => !existingIds.has(m.id)).map(
+        (m) => ({
+          ...m,
+          isChosen: false,
+          isWatched: false,
+          excludeFromRoulette: false,
+        })
+      );
+      return [...toAdd, ...prev];
+    });
+  };
+
   const handleRemoveFromCurrentView = (movieId: string) => {
     if (activeListTab === 'wishlist') {
+      const removed = wishlistMovies.find((m) => m.id === movieId);
       setWishlistMovies((prev) => prev.filter((m) => m.id !== movieId));
+      if (removed) {
+        showToast(`${t.movieRemovedToast}: «${getMovieTitle(removed, lang)}»`, () => {
+          setWishlistMovies((prev) => [removed, ...prev]);
+        });
+      }
     } else {
+      const removed = myMovies.find((m) => m.id === movieId);
       setMyMovies((prev) => prev.filter((m) => m.id !== movieId));
+      if (removed) {
+        showToast(`${t.movieRemovedToast}: «${getMovieTitle(removed, lang)}»`, () => {
+          setMyMovies((prev) => [removed, ...prev]);
+        });
+      }
     }
   };
 
   const handleRemoveFromPool = (movieId: string) => {
+    const removed = myMovies.find((m) => m.id === movieId);
     setMyMovies((prev) => prev.filter((m) => m.id !== movieId));
+    if (removed) {
+      showToast(`${t.movieRemovedToast}: «${getMovieTitle(removed, lang)}»`, () => {
+        setMyMovies((prev) => [removed, ...prev]);
+      });
+    }
   };
 
   const handleClearActiveList = () => {
     if (activeListTab === 'wishlist') {
+      if (wishlistMovies.length === 0) return;
+      const snapshot = [...wishlistMovies];
       setWishlistMovies([]);
+      showToast(`${t.listClearedToast} (${snapshot.length})`, () => {
+        setWishlistMovies(snapshot);
+      });
     } else {
+      if (myMovies.length === 0) return;
+      const snapshot = [...myMovies];
       setMyMovies([]);
+      showToast(`${t.listClearedToast} (${snapshot.length})`, () => {
+        setMyMovies(snapshot);
+      });
     }
   };
 
@@ -636,6 +745,44 @@ export default function App() {
     }
   };
 
+  // Automatically import shared session if URL contains #s=... or ?s=...
+  useEffect(() => {
+    const rawUrl = window.location.href;
+    if (!/[#?&]s=([^&#\s]+)/i.test(rawUrl)) return;
+
+    const code = extractSessionCodeFromInput(rawUrl);
+    if (!code) return;
+
+    // Clean up the URL hash/query immediately so refreshing doesn't re-import
+    try {
+      window.history.replaceState(
+        null,
+        '',
+        window.location.pathname
+      );
+    } catch {
+      // ignore
+    }
+
+    decodeSessionHash(code, tmdbConfig.customApiKey.trim())
+      .then((decoded) => {
+        if (decoded.apiKey && decoded.apiKey.trim().length > 5) {
+          const nextKey = decoded.apiKey.trim();
+          setTmdbConfig((prev) => ({
+            ...prev,
+            mode: 'custom',
+            customApiKey: nextKey,
+            lastSyncStatus: 'connected',
+          }));
+        }
+        handleImportSessionLists(decoded.myMovies, decoded.wishlistMovies);
+        showToast(UI_TEXT[tmdbConfig.language].sessionImportedToast);
+      })
+      .catch(() => {
+        // ignore invalid URL hash
+      });
+  }, []);
+
   const handleOpenMovieDetail = async (
     movie: MovieItem,
     autoPlayTrailer = false
@@ -648,20 +795,50 @@ export default function App() {
       );
       const merged: MovieItem = {
         ...enriched,
+        posterPath: movie.customPoster
+          ? movie.posterPath
+          : enriched.posterPath,
+        customPoster: movie.customPoster,
+        rouletteWeight: movie.rouletteWeight,
         isChosen: movie.isChosen,
         isWatched: movie.isWatched,
         excludeFromRoulette: movie.excludeFromRoulette,
         userRating: movie.userRating,
       };
       setMyMovies((prev) =>
-        prev.map((m) => (m.id === movie.id ? merged : m))
+        prev.map((m) =>
+          m.id === movie.id
+            ? {
+                ...merged,
+                posterPath: m.customPoster ? m.posterPath : merged.posterPath,
+                customPoster: m.customPoster,
+              }
+            : m
+        )
       );
       setWishlistMovies((prev) =>
-        prev.map((m) => (m.id === movie.id ? merged : m))
+        prev.map((m) =>
+          m.id === movie.id
+            ? {
+                ...merged,
+                posterPath: m.customPoster ? m.posterPath : merged.posterPath,
+                customPoster: m.customPoster,
+              }
+            : m
+        )
       );
       setSelectedMovieModal((prev) =>
         prev && prev.movie.id === movie.id
-          ? { ...prev, movie: merged }
+          ? {
+              ...prev,
+              movie: {
+                ...merged,
+                posterPath: prev.movie.customPoster
+                  ? prev.movie.posterPath
+                  : merged.posterPath,
+                customPoster: prev.movie.customPoster,
+              },
+            }
           : prev
       );
     }
@@ -1095,11 +1272,33 @@ export default function App() {
                 )}
               </div>
 
-              <h2 className="font-display text-xl sm:text-2xl font-extrabold uppercase tracking-tight">
-                {activeListTab === 'wishlist'
-                  ? t.emptyWishlistTitle
-                  : t.emptyPoolTitle}
-              </h2>
+              <div className="space-y-1.5 max-w-md">
+                <h2 className="font-display text-xl sm:text-2xl font-extrabold uppercase tracking-tight">
+                  {activeListTab === 'wishlist'
+                    ? t.emptyWishlistTitle
+                    : t.emptyPoolTitle}
+                </h2>
+                {activeListTab === 'pool' && (
+                  <p className="font-sans text-xs sm:text-sm text-[var(--text-muted)]">
+                    {t.emptyPoolHint}
+                  </p>
+                )}
+              </div>
+
+              {activeListTab === 'pool' && (
+                <button
+                  type="button"
+                  onClick={handleLoadStarterHits}
+                  style={{
+                    backgroundColor: 'var(--accent-primary)',
+                    color: 'var(--accent-text)',
+                  }}
+                  className="mt-2 px-5 py-3 rounded-2xl font-sans text-xs font-bold uppercase tracking-wider inline-flex items-center gap-2 transition-opacity hover:opacity-90 cursor-pointer shadow-sm"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>{t.loadStarterHitsBtn}</span>
+                </button>
+              )}
             </section>
           ) : (
             <section className="space-y-5">
@@ -1470,9 +1669,31 @@ export default function App() {
         secretOverride={secretOverride}
         onClose={() => setIsRouletteModalOpen(false)}
         onRemoveCandidate={handleRemoveFromPool}
+        onToggleCandidateWeight={handleToggleCandidateWeight}
         onWinnerSelected={handleWinnerSelected}
         onOpenMovieDetail={handleOpenMovieDetail}
       />
+
+      {/* Floating Notification & Undo Toast */}
+      {toastBanner && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-2xl bg-[#18181F] text-white border border-white/15 shadow-2xl flex items-center gap-3.5 animate-in fade-in slide-in-from-bottom-3 duration-200 max-w-[92vw]">
+          <span className="font-sans text-xs sm:text-sm font-medium truncate">
+            {toastBanner.message}
+          </span>
+          {toastBanner.onUndo && (
+            <button
+              type="button"
+              onClick={() => {
+                toastBanner.onUndo?.();
+                setToastBanner(null);
+              }}
+              className="px-3 py-1 rounded-xl bg-white text-black font-sans text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-opacity shrink-0 cursor-pointer"
+            >
+              {t.undoAction}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Movie Detail, Trailer & Interactive Cast/Director Filmography Modal */}
       <MovieDetailModal
@@ -1488,6 +1709,8 @@ export default function App() {
             ? isMovieInWishlist(selectedMovieModal.movie.id)
             : false
         }
+        isMovieInPool={isMovieInPool}
+        isMovieInWishlist={isMovieInWishlist}
         onClose={() => setSelectedMovieModal(null)}
         onTogglePool={(movie) => {
           if (!isMovieInPool(movie.id)) {
@@ -1496,9 +1719,11 @@ export default function App() {
             handleRemoveFromCurrentView(movie.id);
           }
         }}
+        onAddMovieToPool={handleAddMovieToPoolDirect}
         onRestoreToRoulette={handleRestoreToRoulette}
         onToggleWishlist={handleToggleWishlist}
         onRateMovie={handleRateMovie}
+        onChangePoster={handleChangeMoviePoster}
         onSelectMovie={(movie) => handleOpenMovieDetail(movie, false)}
       />
     </div>
