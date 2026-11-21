@@ -1264,19 +1264,19 @@ export default function App() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={t.searchPlaceholder}
-                  className="w-full pl-11 pr-24 py-3.5 rounded-2xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] font-sans text-sm font-medium text-[var(--text-main)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
+                  className="w-full pl-11 pr-10 py-3.5 rounded-2xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] font-sans text-sm font-medium text-[var(--text-main)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
                 />
-                {searchQuery.trim() && (
+                {searchQuery && (
                   <button
-                    type="submit"
-                    style={{
-                      backgroundColor: 'var(--accent-primary)',
-                      color: 'var(--accent-text)',
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSearchResults([]);
                     }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl font-sans text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                    aria-label="Clear search"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer"
                   >
-                    <PiPlusBold className="w-3.5 h-3.5" />
-                    <span>{t.addBtn}</span>
+                    <PiXBold className="w-4 h-4" />
                   </button>
                 )}
               </form>
