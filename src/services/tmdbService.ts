@@ -706,21 +706,18 @@ export async function fetchPersonMovieCredits(options: {
 
     const uniqueMap = new Map<number, any>();
     combinedRaw.forEach((raw: any) => {
-      if (
-        raw?.id &&
-        raw.id !== excludeMovieTmdbId &&
-        raw.poster_path &&
-        !uniqueMap.has(raw.id)
-      ) {
+      if (raw?.id && raw.poster_path && !uniqueMap.has(raw.id)) {
         uniqueMap.set(raw.id, raw);
       }
     });
 
     const sorted = Array.from(uniqueMap.values()).sort(
-      (a, b) => (b.vote_count || 0) - (a.vote_count || 0)
+      (a, b) =>
+        (b.vote_count || 0) - (a.vote_count || 0) ||
+        (b.popularity || 0) - (a.popularity || 0)
     );
 
-    return sorted.slice(0, 12).map((rawEn: any) => {
+    return sorted.map((rawEn: any) => {
       const rawUk = ukMap.get(rawEn.id) || rawEn;
       return mapBilingualTmdbToMovieItem(rawEn, rawUk);
     });

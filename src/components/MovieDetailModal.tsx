@@ -81,7 +81,6 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
   onGoBack,
 }) => {
   const scrollBodyRef = useRef<HTMLDivElement | null>(null);
-  const filmographyRef = useRef<HTMLDivElement | null>(null);
 
   const [showTrailer, setShowTrailer] = useState<boolean>(autoPlayTrailer);
   const [backdropError, setBackdropError] = useState<boolean>(false);
@@ -92,15 +91,32 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
   const [loadingPosters, setLoadingPosters] = useState<boolean>(false);
   const [customPosterUrlInput, setCustomPosterUrlInput] = useState<string>('');
 
-  // Selected person (Director or Actor) for viewing their other movies
+  // Selected person (Director or Actor) for viewing their full filmography in a dedicated window view
   const [selectedPerson, setSelectedPerson] = useState<{
     id?: number;
     name: string;
     roleLabel: string;
+    profilePath?: string;
+    isDirector?: boolean;
   } | null>(null);
   const [personMovies, setPersonMovies] = useState<MovieItem[]>([]);
   const [loadingPersonMovies, setLoadingPersonMovies] =
     useState<boolean>(false);
+
+  // Stack to restore a person's filmography window when navigating Back from a movie opened inside that person's view
+  const personReturnStackRef = useRef<
+    Array<{
+      forMovieId: string;
+      person: {
+        id?: number;
+        name: string;
+        roleLabel: string;
+        profilePath?: string;
+        isDirector?: boolean;
+      };
+      movies: MovieItem[];
+    }>
+  >([]);
 
   // Similar movies state
   const [similarMovies, setSimilarMovies] = useState<MovieItem[]>([]);
@@ -109,11 +125,23 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
   useEffect(() => {
     setShowTrailer(autoPlayTrailer);
     setBackdropError(false);
-    setSelectedPerson(null);
-    setPersonMovies([]);
     setIsPosterPickerOpen(false);
     setPosterOptions([]);
     setCustomPosterUrlInput('');
+
+    // Check if we arrived back at this movie after clicking Back from a movie opened in a person's window
+    const stack = personReturnStackRef.current;
+    const topEntry = stack.length > 0 ? stack[stack.length - 1] : null;
+    if (movie && topEntry && topEntry.forMovieId === movie.id) {
+      stack.pop();
+      setSelectedPerson(topEntry.person);
+      setPersonMovies(topEntry.movies);
+      setLoadingPersonMovies(false);
+    } else {
+      setSelectedPerson(null);
+      setPersonMovies([]);
+    }
+
     if (scrollBodyRef.current) {
       scrollBodyRef.current.scrollTop = 0;
     }
@@ -171,19 +199,6 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
       isCancelled = true;
     };
   }, [movie?.id, movie?.tmdbId, apiKey]);
-
-  // Smoothly scroll down to the filmography panel whenever a person is clicked or their movies finish loading
-  useEffect(() => {
-    if (selectedPerson) {
-      const timer = window.setTimeout(() => {
-        filmographyRef.current?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
-        });
-      }, 60);
-      return () => window.clearTimeout(timer);
-    }
-  }, [selectedPerson, loadingPersonMovies]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -259,15 +274,15 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
     id?: number;
     name: string;
     roleLabel: string;
+    profilePath?: string;
+    isDirector?: boolean;
   }) => {
-    if (selectedPerson && selectedPerson.name === person.name) {
-      setSelectedPerson(null);
-      setPersonMovies([]);
-      return;
-    }
-
     setSelectedPerson(person);
+    setPersonMovies([]);
     setLoadingPersonMovies(true);
+    if (scrollBodyRef.current) {
+      scrollBodyRef.current.scrollTop = 0;
+    }
     const credits = await fetchPersonMovieCredits({
       personId: person.id && person.id > 10 ? person.id : undefined,
       personName: person.name,
@@ -291,6 +306,202 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
         className="relative w-full max-w-5xl bg-[var(--bg-card)] text-[var(--text-main)] border border-[var(--border-subtle)] rounded-[28px] overflow-hidden shadow-2xl my-auto max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
+        {selectedPerson ? (
+          <>
+            {/* Dedicated Full-Window Person Filmography Header */}
+            <div className="px-5 sm:px-7 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-4 shrink-0 bg-[var(--bg-card)]">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPerson(null);
+                    setPersonMovies([]);
+                  }}
+                  aria-label={t.backToDetails}
+                  className="p-2.5 rounded-xl bg-[var(--bg-subcard)] hover:opacity-85 text-[var(--text-main)] border border-[var(--border-subtle)] transition-opacity cursor-pointer shrink-0"
+                >
+                  <PiArrowLeftBold className="w-5 h-5" />
+                </button>
+
+                {selectedPerson.profilePath ? (
+                  <img
+                    src={selectedPerson.profilePath}
+                    alt={selectedPerson.name}
+                    referrerPolicy="no-referrer"
+                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl object-cover border border-[var(--border-subtle)] shrink-0"
+                  />
+                ) : (
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+                    {selectedPerson.isDirector ? (
+                      <PiVideoCameraBold className="w-6 h-6 text-[var(--text-muted)]" />
+                    ) : (
+                      <PiUserBold className="w-6 h-6 text-[var(--text-muted)]" />
+                    )}
+                  </div>
+                )}
+
+                <div className="min-w-0">
+                  <div className="text-[11px] font-sans font-bold uppercase tracking-wider text-[var(--text-muted)] truncate">
+                    {selectedPerson.roleLabel}
+                    {!loadingPersonMovies && personMovies.length > 0
+                      ? ` · ${personMovies.length}`
+                      : ''}
+                  </div>
+                  <h2 className="font-display text-2xl sm:text-3xl font-bold uppercase tracking-tight truncate">
+                    {selectedPerson.name}
+                  </h2>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="p-2.5 rounded-xl bg-[var(--bg-subcard)] hover:opacity-85 text-[var(--text-main)] border border-[var(--border-subtle)] transition-opacity cursor-pointer shrink-0"
+              >
+                <PiXBold className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Full-Window Scrollable Grid of All Person's Movies */}
+            <div
+              ref={scrollBodyRef}
+              className="p-5 sm:p-7 overflow-y-auto flex-1"
+            >
+              {loadingPersonMovies ? (
+                <div className="py-20 text-center text-sm text-[var(--text-muted)]">
+                  {t.loadingFilmography}
+                </div>
+              ) : personMovies.length === 0 ? (
+                <div className="py-20 text-center text-sm text-[var(--text-muted)]">
+                  {t.noPersonMovies}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  {personMovies.map((pm) => {
+                    const pmTitle = getMovieTitle(pm, language);
+                    const pmInPool = isMovieInPool
+                      ? isMovieInPool(pm.id)
+                      : false;
+                    const pmInWishlist = isMovieInWishlist
+                      ? isMovieInWishlist(pm.id)
+                      : false;
+                    const thumbUrl = pm.posterPath
+                      ? pm.posterPath.replace('/t/p/w780/', '/t/p/w342/')
+                      : undefined;
+
+                    return (
+                      <div
+                        key={pm.id}
+                        onClick={() => {
+                          if (onSelectMovie) {
+                            personReturnStackRef.current.push({
+                              forMovieId: movie.id,
+                              person: selectedPerson,
+                              movies: personMovies,
+                            });
+                            onSelectMovie(pm);
+                          }
+                        }}
+                        className="group relative aspect-[2/3] w-full rounded-2xl overflow-hidden bg-[var(--bg-subcard)] border border-[var(--border-subtle)] cursor-pointer hover:border-white/25 transition-colors select-none [content-visibility:auto] [contain-intrinsic-size:180px_270px]"
+                      >
+                        {thumbUrl ? (
+                          <img
+                            src={thumbUrl}
+                            alt={pmTitle}
+                            referrerPolicy="no-referrer"
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center">
+                            <PiFilmSlateBold className="w-6 h-6 text-zinc-500 mb-1.5" />
+                            <span className="font-display text-xs text-white uppercase">
+                              {pmTitle}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Top-Right Hover Quick Actions: Add to Roulette + Add to Wishlist */}
+                        <div className="absolute top-2 right-2 flex items-center gap-1 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto transition-opacity duration-150">
+                          {onAddMovieToPool && (
+                            <div className="group/btn">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!pmInPool) {
+                                    onAddMovieToPool(pm);
+                                  }
+                                }}
+                                aria-label={
+                                  pmInPool
+                                    ? t.addedToPoolTooltip
+                                    : t.moveToRouletteTitle
+                                }
+                                className={`w-7.5 h-7.5 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                                  pmInPool
+                                    ? 'bg-emerald-500 text-black shadow-md'
+                                    : 'bg-black/85 hover:bg-white text-white hover:text-black border border-white/15'
+                                }`}
+                              >
+                                {pmInPool ? (
+                                  <PiCheckBold className="w-3.5 h-3.5" />
+                                ) : (
+                                  <PiPlusBold className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                              <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2 py-0.5 rounded-md bg-[#141419] text-white border border-white/15 text-[10px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
+                                {pmInPool
+                                  ? t.addedToPoolTooltip
+                                  : t.moveToRouletteTitle}
+                              </span>
+                            </div>
+                          )}
+
+                          {onToggleWishlist && (
+                            <div className="group/btn">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onToggleWishlist(pm);
+                                }}
+                                aria-label={
+                                  pmInWishlist
+                                    ? t.removeFromWishlistTitle
+                                    : t.addToWishlistTitle
+                                }
+                                className={`w-7.5 h-7.5 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                                  pmInWishlist
+                                    ? 'bg-white text-black shadow-md'
+                                    : 'bg-black/85 hover:bg-white text-white/90 hover:text-black border border-white/15'
+                                }`}
+                              >
+                                {pmInWishlist ? (
+                                  <PiBookmarkSimpleFill className="w-3.5 h-3.5" />
+                                ) : (
+                                  <PiBookmarkSimpleBold className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                              <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2 py-0.5 rounded-md bg-[#141419] text-white border border-white/15 text-[10px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
+                                {pmInWishlist
+                                  ? t.removeFromWishlistTitle
+                                  : t.addToWishlistTitle}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
         {/* Top Media Header: Backdrop or Embedded YouTube Trailer */}
         <div className="relative min-h-[250px] sm:min-h-[300px] aspect-video w-full bg-zinc-950 shrink-0 overflow-hidden">
           {showTrailer && movie.trailerYoutubeKey ? (
@@ -682,144 +893,55 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
 
               {/* Portrait Poster Grid for Director & Actors */}
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3.5">
-                {allCrewAndCast.map((person) => {
-                  const isSelected = selectedPerson?.name === person.name;
-                  return (
-                    <button
-                      key={person.key}
-                      type="button"
-                      onClick={() =>
-                        handlePersonClick({
-                          id: person.id,
-                          name: person.name,
-                          roleLabel: person.roleLabel,
-                        })
-                      }
-                      className={`group relative aspect-[2/3] w-full rounded-2xl overflow-hidden bg-[#141419] border text-left transition-all duration-200 cursor-pointer ${
-                        isSelected
-                          ? 'border-[var(--accent-primary)] ring-2 ring-[var(--accent-primary)] scale-[1.02] shadow-xl'
-                          : 'border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50'
-                      }`}
-                    >
-                      {person.profilePath ? (
-                        <img
-                          src={person.profilePath}
-                          alt={person.name}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-zinc-800 to-zinc-950 p-3">
-                          {person.isDirector ? (
-                            <PiVideoCameraBold className="w-9 h-9 text-zinc-400 mb-2" />
-                          ) : (
-                            <PiUserBold className="w-9 h-9 text-zinc-400 mb-2" />
-                          )}
-                        </div>
-                      )}
-
-                      {/* Smooth Bottom Gradient over Portrait */}
-                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black via-black/70 to-transparent" />
-
-                      {/* Role + Person Name at the Bottom */}
-                      <div className="absolute inset-x-0 bottom-0 p-3 space-y-0.5">
-                        <div className="text-[11px] font-medium text-white/75 uppercase tracking-wider truncate">
-                          {person.roleLabel}
-                        </div>
-                        <div className="font-display text-sm sm:text-[15px] font-bold text-white leading-tight line-clamp-2">
-                          {person.name}
-                        </div>
+                {allCrewAndCast.map((person) => (
+                  <button
+                    key={person.key}
+                    type="button"
+                    onClick={() =>
+                      handlePersonClick({
+                        id: person.id,
+                        name: person.name,
+                        roleLabel: person.roleLabel,
+                        profilePath: person.profilePath,
+                        isDirector: person.isDirector,
+                      })
+                    }
+                    className="group relative aspect-[2/3] w-full rounded-2xl overflow-hidden bg-[#141419] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)]/50 text-left transition-all duration-200 cursor-pointer"
+                  >
+                    {person.profilePath ? (
+                      <img
+                        src={person.profilePath}
+                        alt={person.name}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-zinc-800 to-zinc-950 p-3">
+                        {person.isDirector ? (
+                          <PiVideoCameraBold className="w-9 h-9 text-zinc-400 mb-2" />
+                        ) : (
+                          <PiUserBold className="w-9 h-9 text-zinc-400 mb-2" />
+                        )}
                       </div>
-                    </button>
-                  );
-                })}
+                    )}
+
+                    {/* Smooth Bottom Gradient over Portrait */}
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black via-black/70 to-transparent" />
+
+                    {/* Role + Person Name at the Bottom */}
+                    <div className="absolute inset-x-0 bottom-0 p-3 space-y-0.5">
+                      <div className="text-[11px] font-medium text-white/75 uppercase tracking-wider truncate">
+                        {person.roleLabel}
+                      </div>
+                      <div className="font-display text-sm sm:text-[15px] font-bold text-white leading-tight line-clamp-2">
+                        {person.name}
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
-
-              {/* Expanded Person Filmography Panel (Auto-scrolled into view on open) */}
-              {selectedPerson && (
-                <div
-                  ref={filmographyRef}
-                  className="p-5 rounded-2xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] space-y-4 animate-in fade-in duration-150 scroll-mt-4"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-display text-base sm:text-lg font-bold uppercase tracking-wide">
-                        {selectedPerson.name}
-                      </span>
-                      <span className="text-sm text-[var(--text-muted)]">
-                        — {t.personMoviesTitle}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedPerson(null)}
-                      aria-label="Close"
-                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
-                    >
-                      <PiXBold className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {loadingPersonMovies ? (
-                    <div className="py-8 text-center text-sm text-[var(--text-muted)]">
-                      {t.loadingFilmography}
-                    </div>
-                  ) : personMovies.length === 0 ? (
-                    <div className="py-8 text-center text-sm text-[var(--text-muted)]">
-                      {t.noPersonMovies}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3.5">
-                      {personMovies.map((pm) => {
-                        const pmTitle = getMovieTitle(pm, language);
-                        return (
-                          <div
-                            key={pm.id}
-                            onClick={() => {
-                              if (onSelectMovie) {
-                                onSelectMovie(pm);
-                              }
-                            }}
-                            className="group rounded-2xl overflow-hidden bg-[var(--bg-card)] border border-[var(--border-subtle)] cursor-pointer flex flex-col hover:border-[var(--accent-primary)]/50 transition-all"
-                          >
-                            <div className="relative aspect-[2/3] w-full overflow-hidden bg-zinc-900">
-                              {pm.posterPath ? (
-                                <img
-                                  src={pm.posterPath}
-                                  alt={pmTitle}
-                                  referrerPolicy="no-referrer"
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                                  loading="lazy"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <PiFilmSlateBold className="w-6 h-6 text-zinc-500" />
-                                </div>
-                              )}
-                              <div
-                                className="pointer-events-none absolute inset-x-0 bottom-0 h-8"
-                                style={{
-                                  background:
-                                    'linear-gradient(to top, var(--bg-card) 5%, transparent 100%)',
-                                }}
-                              />
-                            </div>
-                            <div className="px-2.5 pb-2.5 pt-1 flex items-center justify-between text-xs font-mono-tabular">
-                              <span className="font-sans font-semibold truncate text-[var(--text-main)]">
-                                {pmTitle}
-                              </span>
-                              <span className="text-[var(--text-muted)] shrink-0 ml-1.5">
-                                {pm.releaseYear}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
@@ -960,6 +1082,8 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
     </div>
   );
