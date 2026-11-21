@@ -266,6 +266,7 @@ export interface AdvancedSearchParams {
     | 'popularity.desc'
     | 'vote_average.desc'
     | 'primary_release_date.desc'
+    | 'primary_release_date.asc'
     | 'vote_count.desc';
   apiKey?: string;
 }
@@ -384,7 +385,10 @@ export async function advancedSearchTmdb(
         discoverParams.set('vote_count.gte', '50');
       } else if (sortBy === 'vote_average.desc') {
         discoverParams.set('vote_count.gte', '200');
-      } else if (sortBy === 'primary_release_date.desc') {
+      } else if (
+        sortBy === 'primary_release_date.desc' ||
+        sortBy === 'primary_release_date.asc'
+      ) {
         discoverParams.set('vote_count.gte', '15');
       }
 

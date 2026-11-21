@@ -43,6 +43,7 @@ interface AdvancedSearchModalProps {
 }
 
 type AdvSortMode =
+  | 'default'
   | 'popularity'
   | 'imdb'
   | 'rt'
@@ -53,69 +54,15 @@ type AdvSortMode =
 
 type OpenDropdownId = 'genres' | 'years' | 'rating' | 'sort' | null;
 
-const MIN_YEAR_BOUND = 1920;
+const MIN_YEAR_BOUND = 1900;
 const CURRENT_YEAR = new Date().getFullYear();
-
-const DECADE_PRESETS: Array<{
-  id: string;
-  labelUk: string;
-  labelEn: string;
-  from: number;
-  to: number;
-}> = [
-  {
-    id: 'all',
-    labelUk: 'Усі роки',
-    labelEn: 'All years',
-    from: 1950,
-    to: CURRENT_YEAR,
-  },
-  {
-    id: '2020s',
-    labelUk: '2020-ті',
-    labelEn: '2020s',
-    from: 2020,
-    to: CURRENT_YEAR,
-  },
-  {
-    id: '2010s',
-    labelUk: '2010-ті',
-    labelEn: '2010s',
-    from: 2010,
-    to: 2019,
-  },
-  {
-    id: '2000s',
-    labelUk: '2000-ні',
-    labelEn: '2000s',
-    from: 2000,
-    to: 2009,
-  },
-  {
-    id: '1990s',
-    labelUk: '1990-ті',
-    labelEn: '1990s',
-    from: 1990,
-    to: 1999,
-  },
-  {
-    id: '1980s',
-    labelUk: '1980-ті',
-    labelEn: '1980s',
-    from: 1980,
-    to: 1989,
-  },
-  {
-    id: 'classic',
-    labelUk: 'До 1980',
-    labelEn: 'Pre-1980',
-    from: 1920,
-    to: 1979,
-  },
-];
+const RECENT_SIX_YEARS = Array.from(
+  { length: 6 },
+  (_, idx) => CURRENT_YEAR - idx
+);
 
 function sortMovieBatch(items: MovieItem[], mode: AdvSortMode): MovieItem[] {
-  if (mode === 'popularity') return items;
+  if (mode === 'default' || mode === 'popularity') return items;
   return [...items].sort((a, b) => {
     if (mode === 'imdb') {
       return b.ratings.imdb.score - a.ratings.imdb.score;
@@ -306,12 +253,13 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
 }) => {
   const [query, setQuery] = useState<string>(initialQuery);
   const [selectedGenres, setSelectedGenres] = useState<number[]>([]);
-  const [yearFrom, setYearFrom] = useState<number>(1950);
-  const [yearTo, setYearTo] = useState<number>(CURRENT_YEAR);
-  const [yearFromText, setYearFromText] = useState<string>('1950');
-  const [yearToText, setYearToText] = useState<string>(String(CURRENT_YEAR));
+  const [yearFilter, setYearFilter] = useState<{
+    from: number;
+    to: number;
+  } | null>(null);
+  const [yearInputText, setYearInputText] = useState<string>('');
   const [minRating, setMinRating] = useState<number>(0);
-  const [sortMode, setSortMode] = useState<AdvSortMode>('popularity');
+  const [sortMode, setSortMode] = useState<AdvSortMode>('default');
 
   const [openDropdown, setOpenDropdown] = useState<OpenDropdownId>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
@@ -366,11 +314,11 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
   ):
     | 'popularity.desc'
     | 'vote_average.desc'
-    | 'primary_release_date.desc' => {
-    if (mode === 'popularity') return 'popularity.desc';
-    if (mode === 'year_desc' || mode === 'year_asc') {
-      return 'primary_release_date.desc';
-    }
+    | 'primary_release_date.desc'
+    | 'primary_release_date.asc' => {
+    if (mode === 'default' || mode === 'popularity') return 'popularity.desc';
+    if (mode === 'year_desc') return 'primary_release_date.desc';
+    if (mode === 'year_asc') return 'primary_release_date.asc';
     return 'vote_average.desc';
   };
 
@@ -404,6 +352,9 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
     callbacksRef.current.onToggleWishlist(m);
   }, []);
 
+  const activeYearFrom = yearFilter ? yearFilter.from : MIN_YEAR_BOUND;
+  const activeYearTo = yearFilter ? yearFilter.to : CURRENT_YEAR;
+
   // Live auto-fetch whenever modal opens or filters change
   useEffect(() => {
     if (!isOpen) return;
@@ -416,8 +367,8 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
       const res = await advancedSearchTmdb({
         query,
         genreIds: selectedGenres,
-        yearFrom: Math.min(yearFrom, yearTo),
-        yearTo: Math.max(yearFrom, yearTo),
+        yearFrom: Math.min(activeYearFrom, activeYearTo),
+        yearTo: Math.max(activeYearFrom, activeYearTo),
         minRating,
         page: 1,
         sortBy: resolveTmdbSortBy(sortMode),
@@ -440,8 +391,8 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
     isOpen,
     query,
     selectedGenres,
-    yearFrom,
-    yearTo,
+    activeYearFrom,
+    activeYearTo,
     minRating,
     sortMode,
     apiKey,
@@ -459,8 +410,8 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
     const res = await advancedSearchTmdb({
       query,
       genreIds: selectedGenres,
-      yearFrom: Math.min(yearFrom, yearTo),
-      yearTo: Math.max(yearFrom, yearTo),
+      yearFrom: Math.min(activeYearFrom, activeYearTo),
+      yearTo: Math.max(activeYearFrom, activeYearTo),
       minRating,
       page: nextPage,
       sortBy: resolveTmdbSortBy(sortMode),
@@ -477,14 +428,14 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
     setLoadingMore(false);
   };
 
-  const isYearFiltered = yearFrom !== 1950 || yearTo !== CURRENT_YEAR;
+  const isYearFiltered = yearFilter !== null;
 
   const hasActiveFilters =
     query.trim().length > 0 ||
     selectedGenres.length > 0 ||
     isYearFiltered ||
     minRating > 0 ||
-    sortMode !== 'popularity';
+    sortMode !== 'default';
 
   const toggleGenre = (genreId: number) => {
     setSelectedGenres((prev) =>
@@ -497,38 +448,97 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
   const handleResetFilters = () => {
     setQuery('');
     setSelectedGenres([]);
-    setYearFrom(1950);
-    setYearTo(CURRENT_YEAR);
-    setYearFromText('1950');
-    setYearToText(String(CURRENT_YEAR));
+    setYearFilter(null);
+    setYearInputText('');
     setMinRating(0);
-    setSortMode('popularity');
+    setSortMode('default');
     setOpenDropdown(null);
   };
 
-  const handleSelectDecade = (from: number, to: number) => {
-    setYearFrom(from);
-    setYearTo(to);
-    setYearFromText(String(from));
-    setYearToText(String(to));
+  const handleToggleQuickYear = (yr: number) => {
+    if (yearFilter && yearFilter.from === yr && yearFilter.to === yr) {
+      setYearFilter(null);
+      setYearInputText('');
+    } else {
+      setYearFilter({ from: yr, to: yr });
+      setYearInputText(String(yr));
+    }
   };
 
-  const commitYearFrom = (raw: string) => {
-    const parsed = parseInt(raw, 10);
-    const clamped = Number.isNaN(parsed)
-      ? 1950
-      : Math.max(MIN_YEAR_BOUND, Math.min(CURRENT_YEAR, parsed));
-    setYearFrom(clamped);
-    setYearFromText(String(clamped));
+  const handleYearInputChange = (raw: string) => {
+    const cleaned = raw.replace(/[^\d\-–—.\s/]/g, '').slice(0, 11);
+    setYearInputText(cleaned);
+
+    const trimmed = cleaned.trim();
+    if (!trimmed) {
+      setYearFilter(null);
+      return;
+    }
+
+    // Single exact 4-digit year (e.g. "2019")
+    if (/^\d{4}$/.test(trimmed)) {
+      const yr = Math.max(
+        MIN_YEAR_BOUND,
+        Math.min(CURRENT_YEAR, parseInt(trimmed, 10))
+      );
+      setYearFilter({ from: yr, to: yr });
+      return;
+    }
+
+    // Year range (e.g. "2010-2020" or "2010 2020")
+    const rangeMatch = trimmed.match(/^(\d{4})\s*[\-–—./\s]\s*(\d{4})$/);
+    if (rangeMatch) {
+      const y1 = Math.max(
+        MIN_YEAR_BOUND,
+        Math.min(CURRENT_YEAR, parseInt(rangeMatch[1], 10))
+      );
+      const y2 = Math.max(
+        MIN_YEAR_BOUND,
+        Math.min(CURRENT_YEAR, parseInt(rangeMatch[2], 10))
+      );
+      setYearFilter({ from: Math.min(y1, y2), to: Math.max(y1, y2) });
+    }
   };
 
-  const commitYearTo = (raw: string) => {
-    const parsed = parseInt(raw, 10);
-    const clamped = Number.isNaN(parsed)
-      ? CURRENT_YEAR
-      : Math.max(MIN_YEAR_BOUND, Math.min(CURRENT_YEAR, parsed));
-    setYearTo(clamped);
-    setYearToText(String(clamped));
+  const commitYearInput = () => {
+    const trimmed = yearInputText.trim();
+    if (!trimmed) {
+      setYearFilter(null);
+      setYearInputText('');
+      return;
+    }
+    const years = trimmed.match(/\d{4}/g);
+    if (!years || years.length === 0) {
+      setYearFilter(null);
+      setYearInputText('');
+      return;
+    }
+    if (years.length === 1) {
+      const y1 = Math.max(
+        MIN_YEAR_BOUND,
+        Math.min(CURRENT_YEAR, parseInt(years[0], 10))
+      );
+      if (/[\-–—]$/.test(trimmed)) {
+        setYearFilter({ from: y1, to: CURRENT_YEAR });
+        setYearInputText(`${y1}–${CURRENT_YEAR}`);
+      } else {
+        setYearFilter({ from: y1, to: y1 });
+        setYearInputText(String(y1));
+      }
+      return;
+    }
+    const y1 = Math.max(
+      MIN_YEAR_BOUND,
+      Math.min(CURRENT_YEAR, parseInt(years[0], 10))
+    );
+    const y2 = Math.max(
+      MIN_YEAR_BOUND,
+      Math.min(CURRENT_YEAR, parseInt(years[1], 10))
+    );
+    const from = Math.min(y1, y2);
+    const to = Math.max(y1, y2);
+    setYearFilter({ from, to });
+    setYearInputText(from === to ? String(from) : `${from}–${to}`);
   };
 
   const ratingOptions = [
@@ -554,25 +564,21 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
         })()
       : `${t.advFilterGenres} (${selectedGenres.length})`;
 
-  const yearsButtonLabel = !isYearFiltered
+  const yearsButtonLabel = !yearFilter
     ? t.advFilterYears
-    : (() => {
-        const preset = DECADE_PRESETS.find(
-          (d) => d.from === yearFrom && d.to === yearTo && d.id !== 'all'
-        );
-        if (preset) {
-          return language === 'en-US' ? preset.labelEn : preset.labelUk;
-        }
-        return yearFrom === yearTo
-          ? `${yearFrom}`
-          : `${Math.min(yearFrom, yearTo)}–${Math.max(yearFrom, yearTo)}`;
-      })();
+    : yearFilter.from === yearFilter.to
+    ? `${yearFilter.from}`
+    : `${yearFilter.from}–${yearFilter.to}`;
 
   const ratingButtonLabel =
-    minRating > 0 ? `${minRating.toFixed(1).replace(/\.0$/, '')}+` : t.advFilterMinRating;
+    minRating > 0
+      ? `${minRating.toFixed(1).replace(/\.0$/, '')}+`
+      : t.advFilterMinRating;
 
   const sortButtonLabel =
-    sortMode === 'popularity'
+    sortMode === 'default'
+      ? t.advFilterSortBy
+      : sortMode === 'popularity'
       ? t.advSortPopular
       : sortMode === 'imdb'
       ? 'IMDb ↓'
@@ -583,8 +589,8 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
       : sortMode === 'tmdb'
       ? 'TMDb ↓'
       : sortMode === 'year_desc'
-      ? t.sortYearNewest
-      : t.sortYearOldest;
+      ? `${t.sortGroupYear} ↓`
+      : `${t.sortGroupYear} ↑`;
 
   return (
     <div
@@ -751,7 +757,10 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                     {isYearFiltered && (
                       <button
                         type="button"
-                        onClick={() => handleSelectDecade(1950, CURRENT_YEAR)}
+                        onClick={() => {
+                          setYearFilter(null);
+                          setYearInputText('');
+                        }}
                         className="text-[10px] font-sans font-semibold text-emerald-400 hover:underline cursor-pointer"
                       >
                         {t.resetFilterBtn}
@@ -759,17 +768,18 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                     )}
                   </div>
 
-                  {/* Quick Decade Pills */}
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {DECADE_PRESETS.map((dec, idx) => {
+                  {/* Dynamic Last 6 Years Grid */}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {RECENT_SIX_YEARS.map((yr) => {
                       const active =
-                        yearFrom === dec.from && yearTo === dec.to;
-                      const isFirst = idx === 0;
+                        Boolean(yearFilter) &&
+                        yearFilter?.from === yr &&
+                        yearFilter?.to === yr;
                       return (
                         <button
-                          key={dec.id}
+                          key={yr}
                           type="button"
-                          onClick={() => handleSelectDecade(dec.from, dec.to)}
+                          onClick={() => handleToggleQuickYear(yr)}
                           style={
                             active
                               ? {
@@ -778,56 +788,47 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                                 }
                               : undefined
                           }
-                          className={`px-2.5 py-1.5 rounded-xl font-sans text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                            isFirst ? 'col-span-2' : ''
-                          } ${
+                          className={`py-2 px-2 rounded-xl font-mono-tabular text-xs flex items-center justify-center transition-colors cursor-pointer ${
                             active
                               ? 'font-bold'
-                              : 'bg-[var(--bg-subcard)]/70 hover:bg-[var(--bg-subcard)] text-[var(--text-main)] font-medium'
+                              : 'bg-[var(--bg-subcard)]/70 hover:bg-[var(--bg-subcard)] text-[var(--text-main)] font-semibold'
                           }`}
                         >
-                          <span>
-                            {language === 'en-US' ? dec.labelEn : dec.labelUk}
-                          </span>
-                          {active && <PiCheckBold className="w-3 h-3 shrink-0" />}
+                          <span>{yr}</span>
                         </button>
                       );
                     })}
                   </div>
 
-                  {/* Exact Year Range Inputs */}
-                  <div className="pt-2.5 border-t border-[var(--border-subtle)] flex items-center justify-between gap-2">
+                  {/* Single Input Field for Year or Year Range (e.g. 1999 or 2010-2020) */}
+                  <div className="pt-2.5 border-t border-[var(--border-subtle)] relative">
                     <input
                       type="text"
-                      inputMode="numeric"
-                      value={yearFromText}
-                      onChange={(e) =>
-                        setYearFromText(
-                          e.target.value.replace(/[^\d]/g, '').slice(0, 4)
-                        )
-                      }
-                      onBlur={() => commitYearFrom(yearFromText)}
+                      inputMode="text"
+                      value={yearInputText}
+                      placeholder={t.advYearInputPlaceholder}
+                      onChange={(e) => handleYearInputChange(e.target.value)}
+                      onBlur={commitYearInput}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') commitYearFrom(yearFromText);
+                        if (e.key === 'Enter') {
+                          commitYearInput();
+                          setOpenDropdown(null);
+                        }
                       }}
-                      className="flex-1 min-w-0 h-8 px-2 rounded-xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] text-center font-mono-tabular text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-[var(--accent-primary)]"
+                      className="w-full h-9 pl-3 pr-7 rounded-xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] font-mono-tabular text-xs font-semibold text-[var(--text-main)] placeholder:font-sans placeholder:font-normal placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] transition-colors"
                     />
-                    <span className="text-xs text-[var(--text-muted)]">—</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={yearToText}
-                      onChange={(e) =>
-                        setYearToText(
-                          e.target.value.replace(/[^\d]/g, '').slice(0, 4)
-                        )
-                      }
-                      onBlur={() => commitYearTo(yearToText)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') commitYearTo(yearToText);
-                      }}
-                      className="flex-1 min-w-0 h-8 px-2 rounded-xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] text-center font-mono-tabular text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-[var(--accent-primary)]"
-                    />
+                    {yearInputText && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setYearFilter(null);
+                          setYearInputText('');
+                        }}
+                        className="absolute right-2.5 top-[calc(50%+5px)] -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                      >
+                        <PiXBold className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -906,7 +907,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
               )}
             </div>
 
-            {/* 4. SORT DROPDOWN (matches the main page Sort popover!) */}
+            {/* 4. SORT DROPDOWN */}
             <div className="relative">
               <button
                 type="button"
@@ -914,7 +915,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                   setOpenDropdown((prev) => (prev === 'sort' ? null : 'sort'))
                 }
                 style={
-                  sortMode !== 'popularity' || openDropdown === 'sort'
+                  sortMode !== 'default' || openDropdown === 'sort'
                     ? {
                         backgroundColor: 'var(--accent-primary)',
                         color: 'var(--accent-text)',
@@ -922,7 +923,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                     : undefined
                 }
                 className={`h-10 px-3.5 rounded-xl border border-[var(--border-subtle)] font-sans text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
-                  sortMode !== 'popularity' || openDropdown === 'sort'
+                  sortMode !== 'default' || openDropdown === 'sort'
                     ? 'font-bold'
                     : 'bg-[var(--bg-subcard)] text-[var(--text-muted)] hover:text-[var(--text-main)] font-semibold'
                 }`}
@@ -939,15 +940,30 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
 
               {openDropdown === 'sort' && (
                 <div className="absolute right-0 top-full mt-2 w-80 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-2xl p-3.5 space-y-2.5 z-40 animate-in fade-in zoom-in-95 duration-150">
-                  <span className="font-sans text-[10px] font-bold tracking-wider uppercase text-[var(--text-muted)] block px-0.5">
-                    {t.advFilterSortBy}
-                  </span>
+                  <div className="flex items-center justify-between px-0.5">
+                    <span className="font-sans text-[10px] font-bold tracking-wider uppercase text-[var(--text-muted)]">
+                      {t.advFilterSortBy}
+                    </span>
+                    {sortMode !== 'default' && (
+                      <button
+                        type="button"
+                        onClick={() => setSortMode('default')}
+                        className="text-[10px] font-sans font-semibold text-emerald-400 hover:underline cursor-pointer"
+                      >
+                        {t.resetFilterBtn}
+                      </button>
+                    )}
+                  </div>
 
-                  {/* 3-Tab Sort Switch: Популярність / Рейтинг / Рік */}
-                  <div className="grid grid-cols-[1.25fr_1fr_0.8fr] gap-1 p-1 rounded-xl bg-[var(--bg-subcard)]">
+                  {/* 3-Tab Sort Switch: Популярність / Рейтинг / Рік (with inline ↓ / ↑ toggle) */}
+                  <div className="grid grid-cols-[1.25fr_1fr_0.85fr] gap-1 p-1 rounded-xl bg-[var(--bg-subcard)]">
                     <button
                       type="button"
-                      onClick={() => setSortMode('popularity')}
+                      onClick={() =>
+                        setSortMode((prev) =>
+                          prev === 'popularity' ? 'default' : 'popularity'
+                        )
+                      }
                       style={
                         sortMode === 'popularity'
                           ? {
@@ -968,7 +984,11 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (!isRatingSort) setSortMode('imdb');
+                        if (!isRatingSort) {
+                          setSortMode('imdb');
+                        } else {
+                          setSortMode('default');
+                        }
                       }}
                       style={
                         isRatingSort
@@ -990,7 +1010,9 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (!isYearSort) setSortMode('year_desc');
+                        setSortMode((prev) =>
+                          prev === 'year_desc' ? 'year_asc' : 'year_desc'
+                        );
                       }}
                       style={
                         isYearSort
@@ -1000,13 +1022,16 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                             }
                           : undefined
                       }
-                      className={`py-2 px-2.5 rounded-lg font-sans text-xs whitespace-nowrap transition-colors cursor-pointer ${
+                      className={`py-2 px-2.5 rounded-lg font-sans text-xs whitespace-nowrap flex items-center justify-center gap-1 transition-colors cursor-pointer ${
                         isYearSort
                           ? 'font-bold'
                           : 'font-medium text-[var(--text-muted)] hover:text-[var(--text-main)]'
                       }`}
                     >
-                      {t.sortGroupYear}
+                      <span>{t.sortGroupYear}</span>
+                      {isYearSort && (
+                        <span>{sortMode === 'year_asc' ? '↑' : '↓'}</span>
+                      )}
                     </button>
                   </div>
 
@@ -1065,34 +1090,6 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                           </button>
                         );
                       })}
-                    </div>
-                  )}
-
-                  {/* Year Direction Sub-Picker when "За роком" is active */}
-                  {isYearSort && (
-                    <div className="grid grid-cols-2 gap-1.5 pt-0.5 animate-in fade-in duration-100">
-                      <button
-                        type="button"
-                        onClick={() => setSortMode('year_desc')}
-                        className={`py-1.5 px-2.5 rounded-lg font-sans text-[11px] border transition-all cursor-pointer ${
-                          sortMode === 'year_desc'
-                            ? 'bg-[var(--bg-subcard)] border-[var(--accent-primary)] font-bold'
-                            : 'bg-[var(--bg-subcard)]/50 border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                        }`}
-                      >
-                        {t.sortYearNewest}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSortMode('year_asc')}
-                        className={`py-1.5 px-2.5 rounded-lg font-sans text-[11px] border transition-all cursor-pointer ${
-                          sortMode === 'year_asc'
-                            ? 'bg-[var(--bg-subcard)] border-[var(--accent-primary)] font-bold'
-                            : 'bg-[var(--bg-subcard)]/50 border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                        }`}
-                      >
-                        {t.sortYearOldest}
-                      </button>
                     </div>
                   )}
                 </div>
