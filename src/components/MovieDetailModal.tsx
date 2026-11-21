@@ -325,13 +325,16 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
 
                 {selectedPerson.profilePath ? (
                   <img
-                    src={selectedPerson.profilePath}
+                    src={selectedPerson.profilePath.replace(
+                      '/t/p/w500/',
+                      '/t/p/w185/'
+                    )}
                     alt={selectedPerson.name}
                     referrerPolicy="no-referrer"
-                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl object-cover border border-[var(--border-subtle)] shrink-0"
+                    className="w-12 h-16 sm:w-14 sm:h-[74px] rounded-2xl object-cover object-top border border-[var(--border-subtle)] shadow-md shrink-0"
                   />
                 ) : (
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
+                  <div className="w-12 h-16 sm:w-14 sm:h-[74px] rounded-2xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0">
                     {selectedPerson.isDirector ? (
                       <PiVideoCameraBold className="w-6 h-6 text-[var(--text-muted)]" />
                     ) : (
@@ -387,7 +390,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                       ? isMovieInWishlist(pm.id)
                       : false;
                     const thumbUrl = pm.posterPath
-                      ? pm.posterPath.replace('/t/p/w780/', '/t/p/w342/')
+                      ? pm.posterPath.replace('/t/p/w780/', '/t/p/w500/')
                       : undefined;
 
                     return (
@@ -516,7 +519,10 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
             <>
               {!backdropError && (movie.backdropPath || movie.posterPath) ? (
                 <img
-                  src={movie.backdropPath || movie.posterPath}
+                  src={(movie.backdropPath || movie.posterPath).replace(
+                    '/t/p/w1280/',
+                    '/t/p/original/'
+                  )}
                   alt={displayTitle}
                   referrerPolicy="no-referrer"
                   onError={() => setBackdropError(true)}

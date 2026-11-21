@@ -13,7 +13,7 @@ import {
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 export const TMDB_IMAGE_BASE_POSTER = 'https://image.tmdb.org/t/p/w780';
-export const TMDB_IMAGE_BASE_BACKDROP = 'https://image.tmdb.org/t/p/w1280';
+export const TMDB_IMAGE_BASE_BACKDROP = 'https://image.tmdb.org/t/p/original';
 export const TMDB_IMAGE_BASE_PROFILE = 'https://image.tmdb.org/t/p/w500';
 
 export interface TmdbGenreOption {
@@ -566,6 +566,9 @@ export async function fetchTmdbMovieDetails(
         : enPosterPath
         ? `${TMDB_IMAGE_BASE_POSTER}${enPosterPath}`
         : movie.posterPath,
+      backdropPath: detailEn.backdrop_path
+        ? `${TMDB_IMAGE_BASE_BACKDROP}${detailEn.backdrop_path}`
+        : movie.backdropPath,
       customPoster: movie.customPoster,
     };
   } catch {
