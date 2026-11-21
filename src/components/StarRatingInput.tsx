@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import { PiXBold } from 'react-icons/pi';
 
 export function normalizeStarRating(raw?: number): number | undefined {
   if (raw === undefined || raw === null || Number.isNaN(raw) || raw <= 0) {
@@ -146,7 +146,7 @@ export const StarRatingInput: React.FC<StarRatingInputProps> = ({
           aria-label={clearLabel}
           className="p-1 rounded-lg text-[var(--text-muted)] hover:text-rose-400 transition-colors cursor-pointer"
         >
-          <X className="w-3.5 h-3.5" />
+          <PiXBold className="w-3.5 h-3.5" />
         </button>
       )}
     </div>

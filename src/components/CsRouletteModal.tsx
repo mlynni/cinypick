@@ -1,14 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  X,
-  Dices,
-  Play,
-  Trash2,
-  RotateCcw,
-  Film,
-  Volume2,
-  VolumeX,
-} from 'lucide-react';
+  PiArrowCounterClockwiseBold,
+  PiFilmSlateBold,
+  PiPlayFill,
+  PiSpeakerHighBold,
+  PiSpeakerSlashBold,
+  PiXBold,
+} from 'react-icons/pi';
 import {
   AppLanguage,
   MovieItem,
@@ -29,7 +27,7 @@ interface CsRouletteModalProps {
   language: AppLanguage;
   secretOverride?: SecretOverrideConfig;
   onClose: () => void;
-  onRemoveCandidate: (movieId: string) => void;
+  onRemoveCandidate?: (movieId: string) => void;
   onToggleCandidateWeight?: (movieId: string) => void;
   onWinnerSelected?: (movie: MovieItem) => void;
   onOpenMovieDetail: (movie: MovieItem, autoPlayTrailer?: boolean) => void;
@@ -64,38 +62,23 @@ function buildMaxSpreadRouletteTape(pool: WheelCandidate[]): {
   winningIndex: number;
   chosenWinner: WheelCandidate;
 } {
-  // Expand pool according to each movie's rouletteWeight (1x, 2x, 3x)
-  const weightedPool: WheelCandidate[] = [];
-  pool.forEach((c) => {
-    const w = Math.max(1, Math.min(3, c.movie.rouletteWeight || 1));
-    for (let k = 0; k < w; k++) {
-      weightedPool.push(c);
-    }
-  });
-
-  const effectivePool = weightedPool.length > 0 ? weightedPool : pool;
-  const chosenWinner =
-    effectivePool[Math.floor(Math.random() * effectivePool.length)];
+  const chosenWinner = pool[Math.floor(Math.random() * pool.length)];
 
   if (pool.length === 1) {
     const tape = Array.from({ length: 64 }, () => pool[0]);
     return { tape, winningIndex: 48, chosenWinner: pool[0] };
   }
 
-  const baseCycle = shuffleArray(effectivePool);
+  const baseCycle = shuffleArray(pool);
   const tape: WheelCandidate[] = [];
-  const targetTotalLength = MIN_LANDING_INDEX + effectivePool.length * 2 + 14;
+  const targetTotalLength = MIN_LANDING_INDEX + pool.length * 2 + 14;
 
   while (tape.length < targetTotalLength) {
     tape.push(...baseCycle);
   }
 
   let winningIndex = MIN_LANDING_INDEX;
-  for (
-    let i = MIN_LANDING_INDEX;
-    i < MIN_LANDING_INDEX + effectivePool.length;
-    i++
-  ) {
+  for (let i = MIN_LANDING_INDEX; i < MIN_LANDING_INDEX + pool.length; i++) {
     if (tape[i] && tape[i].movie.id === chosenWinner.movie.id) {
       winningIndex = i;
       break;
@@ -111,8 +94,6 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
   language,
   secretOverride,
   onClose,
-  onRemoveCandidate,
-  onToggleCandidateWeight,
   onWinnerSelected,
   onOpenMovieDetail,
 }) => {
@@ -120,8 +101,9 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
   const trackRef = useRef<HTMLDivElement | null>(null);
   const confettiCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const noiseBufferRef = useRef<AudioBuffer | null>(null);
   const spinTimeoutRef = useRef<number | null>(null);
-  const tickTimersRef = useRef<number[]>([]);
+  const tickRafRef = useRef<number | null>(null);
 
   const [tapeItems, setTapeItems] = useState<WheelCandidate[]>([]);
   const [activeWinningIndex, setActiveWinningIndex] = useState<number>(48);
@@ -132,65 +114,47 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
 
   const [isRolling, setIsRolling] = useState<boolean>(false);
   const [winner, setWinner] = useState<WheelCandidate | null>(null);
-  const [eliminatedCandidate, setEliminatedCandidate] =
-    useState<WheelCandidate | null>(null);
-  const [eliminatedIds, setEliminatedIds] = useState<string[]>([]);
-  const [rouletteMode, setRouletteMode] = useState<'classic' | 'elimination'>(
-    'classic'
-  );
-  const [runtimeFilter, setRuntimeFilter] = useState<'all' | '120' | '150'>(
-    'all'
-  );
-  const [genreFilter, setGenreFilter] = useState<string>('all');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const soundEnabledRef = useRef<boolean>(true);
 
   const t = UI_TEXT[language];
 
-  // Available genres across all candidates
-  const availableGenres = React.useMemo(() => {
-    const set = new Set<string>();
-    candidates.forEach((c) => {
-      getMovieGenres(c.movie, language).forEach((g) => set.add(g));
+  const handleToggleSound = () => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      soundEnabledRef.current = next;
+      try {
+        if (audioCtxRef.current) {
+          if (!next && audioCtxRef.current.state === 'running') {
+            audioCtxRef.current.suspend();
+          } else if (next && audioCtxRef.current.state === 'suspended') {
+            audioCtxRef.current.resume();
+          }
+        }
+      } catch {
+        // ignore audio errors
+      }
+      return next;
     });
-    return Array.from(set);
-  }, [candidates, language]);
-
-  // Filtered candidates based on quick runtime/genre filters and elimination state
-  const activePool = React.useMemo(() => {
-    return candidates.filter((c) => {
-      if (
-        rouletteMode === 'elimination' &&
-        eliminatedIds.includes(c.movie.id)
-      ) {
-        return false;
-      }
-      if (runtimeFilter === '120' && c.movie.runtime > 120) {
-        return false;
-      }
-      if (runtimeFilter === '150' && c.movie.runtime > 150) {
-        return false;
-      }
-      if (
-        genreFilter !== 'all' &&
-        !getMovieGenres(c.movie, language).includes(genreFilter)
-      ) {
-        return false;
-      }
-      return true;
-    });
-  }, [candidates, rouletteMode, eliminatedIds, runtimeFilter, genreFilter, language]);
+  };
 
   const clearScheduledAudioAndTimers = () => {
     if (spinTimeoutRef.current) {
       window.clearTimeout(spinTimeoutRef.current);
       spinTimeoutRef.current = null;
     }
-    tickTimersRef.current.forEach((id) => window.clearTimeout(id));
-    tickTimersRef.current = [];
+    if (tickRafRef.current) {
+      window.cancelAnimationFrame(tickRafRef.current);
+      tickRafRef.current = null;
+    }
   };
 
-  const playTickSound = () => {
-    if (!soundEnabled) return;
+  /**
+   * Tactile mechanical wheel peg click + woody/carbon sub-thump,
+   * pitch-modulated by spin progress so slowing down builds suspense.
+   */
+  const playTickSound = (progress = 0.5) => {
+    if (!soundEnabledRef.current) return;
     try {
       const Ctx =
         window.AudioContext ||
@@ -204,26 +168,60 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
         ctx.resume();
       }
 
+      const now = ctx.currentTime;
+
+      // 1. Crisp mechanical transient click (bandpass-filtered noise burst, 12ms)
+      if (!noiseBufferRef.current) {
+        const bufSize = Math.floor(ctx.sampleRate * 0.015);
+        const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < bufSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.3));
+        }
+        noiseBufferRef.current = buf;
+      }
+
+      const noiseSrc = ctx.createBufferSource();
+      noiseSrc.buffer = noiseBufferRef.current;
+      const bandpass = ctx.createBiquadFilter();
+      bandpass.type = 'bandpass';
+      bandpass.frequency.setValueAtTime(2100 + progress * 500, now);
+      bandpass.Q.setValueAtTime(3.2, now);
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.14, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.014);
+
+      noiseSrc.connect(bandpass);
+      bandpass.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noiseSrc.start(now);
+
+      // 2. Warm mechanical body resonance (snappy pitch drop 22ms)
       const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(520, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.032);
+      const bodyGain = ctx.createGain();
+      osc.type = 'sine';
+      const startFreq = 780 + progress * 220;
+      osc.frequency.setValueAtTime(startFreq, now);
+      osc.frequency.exponentialRampToValueAtTime(135, now + 0.022);
 
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.032);
+      bodyGain.gain.setValueAtTime(0.09, now);
+      bodyGain.gain.exponentialRampToValueAtTime(0.001, now + 0.024);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.035);
+      osc.connect(bodyGain);
+      bodyGain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.025);
     } catch {
       // Ignore audio errors
     }
   };
 
+  /**
+   * Lush Cinematic Major-9th Reveal Chord + Warm Sub-Bass Lock Thump
+   */
   const playWinChime = () => {
-    if (!soundEnabled) return;
+    if (!soundEnabledRef.current) return;
     try {
       const Ctx =
         window.AudioContext ||
@@ -237,21 +235,45 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
         ctx.resume();
       }
 
-      const notes = [523.25, 659.25, 783.99, 1046.5];
-      notes.forEach((freq, i) => {
-        const osc = ctx.createOscillator();
+      const now = ctx.currentTime;
+
+      // Sub-bass lock impact
+      const subOsc = ctx.createOscillator();
+      const subGain = ctx.createGain();
+      subOsc.type = 'sine';
+      subOsc.frequency.setValueAtTime(140, now);
+      subOsc.frequency.exponentialRampToValueAtTime(55, now + 0.35);
+      subGain.gain.setValueAtTime(0.16, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+      subOsc.connect(subGain);
+      subGain.connect(ctx.destination);
+      subOsc.start(now);
+      subOsc.stop(now + 0.4);
+
+      // Warm Major-9th arpeggio shimmer (C5 - E5 - G5 - B5 - D6 - G6)
+      const chordNotes = [523.25, 659.25, 783.99, 987.77, 1174.66, 1567.98];
+      chordNotes.forEach((freq, i) => {
+        const start = now + i * 0.055;
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
         const gain = ctx.createGain();
-        const start = ctx.currentTime + i * 0.085;
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, start);
 
-        gain.gain.setValueAtTime(0.11, start);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.55);
+        osc1.type = 'triangle';
+        osc2.type = 'sine';
+        osc1.frequency.setValueAtTime(freq, start);
+        osc2.frequency.setValueAtTime(freq * 1.003, start); // subtle chorus detune
 
-        osc.connect(gain);
+        gain.gain.setValueAtTime(0.001, start);
+        gain.gain.linearRampToValueAtTime(0.075, start + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0008, start + 0.85);
+
+        osc1.connect(gain);
+        osc2.connect(gain);
         gain.connect(ctx.destination);
-        osc.start(start);
-        osc.stop(start + 0.56);
+        osc1.start(start);
+        osc2.start(start);
+        osc1.stop(start + 0.88);
+        osc2.stop(start + 0.88);
       });
     } catch {
       // Ignore audio errors
@@ -326,7 +348,6 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
 
     clearScheduledAudioAndTimers();
     setWinner(null);
-    setEliminatedCandidate(null);
     setIsRolling(true);
 
     const { tape, winningIndex, chosenWinner } =
@@ -372,45 +393,45 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
       'transform 5.0s cubic-bezier(0.10, 0.82, 0.14, 1)';
     trackEl.style.transform = `translate3d(${-targetOffset}px, 0, 0)`;
 
+    // 4. Real-time frame tracker: fires a tactile click & tumbles the dice every time a poster crosses the center laser line
+    let lastCardIndex = -1;
+    const startTime = performance.now();
     const totalDuration = 5000;
-    const totalTicks = 38;
-    for (let i = 0; i < totalTicks; i++) {
-      const progress = i / totalTicks;
-      const delayMs = Math.pow(progress, 2.35) * (totalDuration - 120);
-      const tId = window.setTimeout(() => {
-        playTickSound();
-      }, delayMs);
-      tickTimersRef.current.push(tId);
-    }
+
+    const trackCardCrossings = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / totalDuration);
+
+      if (trackRef.current) {
+        const matrix = window.getComputedStyle(trackRef.current).transform;
+        let currentTranslateX = 0;
+        if (matrix && matrix !== 'none') {
+          const parts = matrix.match(/matrix.*\((.+)\)/);
+          if (parts && parts[1]) {
+            const values = parts[1].split(',').map((v) => parseFloat(v.trim()));
+            currentTranslateX = Math.abs(
+              values.length === 16 ? values[12] : values[4] || 0
+            );
+          }
+        }
+        const pointerX = currentTranslateX + viewportWidth / 2;
+        const currentCardIndex = Math.floor(pointerX / ITEM_STRIDE_PX);
+
+        if (currentCardIndex !== lastCardIndex && currentCardIndex >= 0) {
+          lastCardIndex = currentCardIndex;
+          playTickSound(progress);
+        }
+      }
+
+      if (elapsed < totalDuration) {
+        tickRafRef.current = window.requestAnimationFrame(trackCardCrossings);
+      }
+    };
+
+    tickRafRef.current = window.requestAnimationFrame(trackCardCrossings);
 
     spinTimeoutRef.current = window.setTimeout(() => {
       setIsRolling(false);
-
-      // Elimination Mode logic when more than 1 movie is in activePool
-      if (rouletteMode === 'elimination' && activePool.length > 1) {
-        const nextEliminatedIds = [...eliminatedIds, pendingWinner.movie.id];
-        setEliminatedIds(nextEliminatedIds);
-        const remaining = activePool.filter(
-          (c) => c.movie.id !== pendingWinner.movie.id
-        );
-
-        if (remaining.length === 1) {
-          // Last survivor wins!
-          const finalSurvivor = remaining[0];
-          setWinner(finalSurvivor);
-          setEliminatedCandidate(pendingWinner);
-          playWinChime();
-          launchConfetti();
-          if (onWinnerSelected) {
-            onWinnerSelected(finalSurvivor.movie);
-          }
-        } else {
-          // Eliminated one movie, ready for next elimination spin
-          setEliminatedCandidate(pendingWinner);
-          playTickSound();
-        }
-        return;
-      }
 
       const shouldReplaceWithSecret = Boolean(
         secretOverride?.movie &&
@@ -445,15 +466,11 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
     };
   }, [spinTrigger]);
 
-  // Trigger roll automatically when modal opens
+  // Trigger roll automatically when modal opens (as before)
   useEffect(() => {
     if (!isOpen) {
       clearScheduledAudioAndTimers();
       setIsRolling(false);
-      setEliminatedIds([]);
-      setEliminatedCandidate(null);
-      setRuntimeFilter('all');
-      setGenreFilter('all');
       return;
     }
 
@@ -501,79 +518,22 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
         />
 
         {/* Top Modal Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-[var(--border-subtle)]">
-          <div className="flex items-center gap-3">
-            <h2 className="font-display text-2xl font-bold tracking-wide uppercase">
-              {t.rouletteTitle}
-            </h2>
-
-            {/* Mode Switch: Classic vs Elimination */}
-            {candidates.length > 1 && (
-              <div className="flex items-center p-1 rounded-xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)]">
-                <button
-                  type="button"
-                  disabled={isRolling}
-                  onClick={() => {
-                    setRouletteMode('classic');
-                    setEliminatedIds([]);
-                    setEliminatedCandidate(null);
-                  }}
-                  style={
-                    rouletteMode === 'classic'
-                      ? {
-                          backgroundColor: 'var(--accent-primary)',
-                          color: 'var(--accent-text)',
-                        }
-                      : undefined
-                  }
-                  className={`px-2.5 py-1 rounded-lg font-sans text-[11px] transition-colors cursor-pointer disabled:opacity-50 ${
-                    rouletteMode === 'classic'
-                      ? 'font-bold'
-                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                  }`}
-                >
-                  {t.rouletteModeStandard}
-                </button>
-                <button
-                  type="button"
-                  disabled={isRolling}
-                  onClick={() => {
-                    setRouletteMode('elimination');
-                    setEliminatedIds([]);
-                    setEliminatedCandidate(null);
-                    setWinner(null);
-                  }}
-                  style={
-                    rouletteMode === 'elimination'
-                      ? {
-                          backgroundColor: 'var(--accent-primary)',
-                          color: 'var(--accent-text)',
-                        }
-                      : undefined
-                  }
-                  className={`px-2.5 py-1 rounded-lg font-sans text-[11px] transition-colors cursor-pointer disabled:opacity-50 ${
-                    rouletteMode === 'elimination'
-                      ? 'font-bold'
-                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                  }`}
-                >
-                  {t.rouletteModeElimination}
-                </button>
-              </div>
-            )}
-          </div>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
+          <h2 className="font-display text-2xl font-bold tracking-wide uppercase">
+            {t.rouletteTitle}
+          </h2>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setSoundEnabled((prev) => !prev)}
+              onClick={handleToggleSound}
               aria-label={soundEnabled ? 'Mute sound' : 'Enable sound'}
               className="p-2.5 rounded-xl bg-[var(--bg-subcard)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer"
             >
               {soundEnabled ? (
-                <Volume2 className="w-4.5 h-4.5" />
+                <PiSpeakerHighBold className="w-4.5 h-4.5" />
               ) : (
-                <VolumeX className="w-4.5 h-4.5" />
+                <PiSpeakerSlashBold className="w-4.5 h-4.5" />
               )}
             </button>
 
@@ -584,113 +544,10 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
               aria-label="Close"
               className="p-2 rounded-xl text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <PiXBold className="w-5 h-5" />
             </button>
           </div>
         </div>
-
-        {/* Quick Evening Filters Bar (Runtime & Genre) */}
-        {candidates.length > 1 && (
-          <div className="px-6 py-2.5 bg-[var(--bg-subcard)]/50 border-b border-[var(--border-subtle)] flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1">
-              {(
-                [
-                  { id: 'all', label: t.rouletteFilterAllTime },
-                  { id: '120', label: t.rouletteFilterUnder120 },
-                  { id: '150', label: t.rouletteFilterUnder150 },
-                ] as const
-              ).map((rt) => {
-                const active = runtimeFilter === rt.id;
-                return (
-                  <button
-                    key={rt.id}
-                    type="button"
-                    disabled={isRolling}
-                    onClick={() => {
-                      setRuntimeFilter(rt.id);
-                      setEliminatedIds([]);
-                    }}
-                    style={
-                      active
-                        ? {
-                            backgroundColor: 'var(--accent-primary)',
-                            color: 'var(--accent-text)',
-                          }
-                        : undefined
-                    }
-                    className={`px-2.5 py-1 rounded-lg font-sans text-[11px] transition-colors cursor-pointer disabled:opacity-50 ${
-                      active
-                        ? 'font-bold'
-                        : 'bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border-subtle)]'
-                    }`}
-                  >
-                    {rt.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {availableGenres.length > 1 && (
-              <>
-                <span className="text-[var(--text-muted)]/40 text-xs">|</span>
-                <div className="flex items-center gap-1 overflow-x-auto max-w-full py-0.5">
-                  <button
-                    type="button"
-                    disabled={isRolling}
-                    onClick={() => {
-                      setGenreFilter('all');
-                      setEliminatedIds([]);
-                    }}
-                    style={
-                      genreFilter === 'all'
-                        ? {
-                            backgroundColor: 'var(--accent-primary)',
-                            color: 'var(--accent-text)',
-                          }
-                        : undefined
-                    }
-                    className={`px-2.5 py-1 rounded-lg font-sans text-[11px] shrink-0 transition-colors cursor-pointer disabled:opacity-50 ${
-                      genreFilter === 'all'
-                        ? 'font-bold'
-                        : 'bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border-subtle)]'
-                    }`}
-                  >
-                    {t.rouletteFilterAllGenres}
-                  </button>
-                  {availableGenres.map((g) => {
-                    const active = genreFilter === g;
-                    return (
-                      <button
-                        key={g}
-                        type="button"
-                        disabled={isRolling}
-                        onClick={() => {
-                          setGenreFilter(active ? 'all' : g);
-                          setEliminatedIds([]);
-                        }}
-                        style={
-                          active
-                            ? {
-                                backgroundColor: 'var(--accent-primary)',
-                                color: 'var(--accent-text)',
-                              }
-                            : undefined
-                        }
-                        className={`px-2.5 py-1 rounded-lg font-sans text-[11px] shrink-0 transition-colors cursor-pointer disabled:opacity-50 ${
-                          active
-                            ? 'font-bold'
-                            : 'bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border-subtle)]'
-                        }`}
-                      >
-                        {g}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-        )}
 
         {/* Full-Format 2:3 Poster Roulette Viewport */}
         <div className="py-6 bg-[#09090B] relative overflow-hidden">
@@ -749,7 +606,7 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
                           />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-zinc-800">
-                            <Film className="w-8 h-8 text-zinc-400 mb-2" />
+                            <PiFilmSlateBold className="w-8 h-8 text-zinc-400 mb-2" />
                             <span className="font-display text-sm text-white uppercase">
                               {titleText}
                             </span>
@@ -763,94 +620,24 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
             )}
           </div>
 
-          {/* Minimalist Spin Again / Next Elimination Button */}
-          {(isRolling || activePool.length > 0) && (
-            <div className="mt-5 flex items-center justify-center gap-2.5">
+          {/* Spin Again Button (shown only after the spin finishes) */}
+          {!isRolling && candidates.length > 0 && (
+            <div className="mt-5 flex items-center justify-center">
               <button
                 type="button"
-                disabled={isRolling || activePool.length === 0}
-                onClick={() => prepareRoll(activePool)}
-                className="px-5 py-2.5 rounded-xl bg-[#18181F] hover:bg-white text-white hover:text-black border border-white/15 disabled:opacity-45 font-sans text-xs font-semibold tracking-wider uppercase flex items-center gap-2 transition-colors cursor-pointer"
+                onClick={() => prepareRoll(candidates)}
+                className="px-5 py-2.5 rounded-xl bg-[#18181F] hover:bg-white text-white hover:text-black border border-white/15 font-sans text-xs font-semibold tracking-wider uppercase flex items-center gap-2 transition-colors cursor-pointer"
               >
-                {isRolling ? (
-                  <>
-                    <Dices className="w-4 h-4 animate-spin" />
-                    <span>{t.rollingTape}</span>
-                  </>
-                ) : rouletteMode === 'elimination' &&
-                  eliminatedIds.length > 0 &&
-                  !winner ? (
-                  <>
-                    <Dices className="w-3.5 h-3.5" />
-                    <span>
-                      {t.nextEliminationSpin} ({activePool.length})
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>{t.spinAgain}</span>
-                  </>
-                )}
+                <PiArrowCounterClockwiseBold className="w-3.5 h-3.5" />
+                <span>{t.spinAgain}</span>
               </button>
-
-              {rouletteMode === 'elimination' &&
-                eliminatedIds.length > 0 &&
-                !isRolling && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEliminatedIds([]);
-                      setEliminatedCandidate(null);
-                      setWinner(null);
-                    }}
-                    className="px-3.5 py-2.5 rounded-xl bg-[#18181F]/80 hover:bg-white/15 text-zinc-300 border border-white/10 font-sans text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>{t.resetFilterBtn}</span>
-                  </button>
-                )}
             </div>
           )}
         </div>
 
-        {/* Winner Drop Reveal & Remaining Movies in Reel */}
-        <div className="p-6 space-y-6 max-h-[44vh] overflow-y-auto">
-          {eliminatedCandidate && !winner && !isRolling && (
-            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3.5 min-w-0">
-                {eliminatedCandidate.movie.posterPath && (
-                  <img
-                    src={eliminatedCandidate.movie.posterPath}
-                    alt={getMovieTitle(eliminatedCandidate.movie, language)}
-                    referrerPolicy="no-referrer"
-                    className="w-12 h-18 object-cover rounded-xl grayscale opacity-75 shrink-0"
-                  />
-                )}
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-rose-400">
-                    {t.eliminatedBadge}
-                  </div>
-                  <div className="font-display text-base sm:text-lg font-bold uppercase truncate line-through opacity-80">
-                    {getMovieTitle(eliminatedCandidate.movie, language)}
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => prepareRoll(activePool)}
-                style={{
-                  backgroundColor: 'var(--accent-primary)',
-                  color: 'var(--accent-text)',
-                }}
-                className="px-4 py-2 rounded-xl font-sans text-xs font-bold uppercase tracking-wider shrink-0 cursor-pointer"
-              >
-                {t.nextEliminationSpin} ({activePool.length})
-              </button>
-            </div>
-          )}
-
-          {winner && !isRolling && (
+        {/* Winner Drop Reveal ONLY (No movies list below) */}
+        {winner && !isRolling && (
+          <div className="p-6">
             <div className="p-5 rounded-2xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] flex flex-col sm:flex-row gap-5 items-center sm:items-start">
               {winner.movie.posterPath ? (
                 <img
@@ -861,7 +648,7 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
                 />
               ) : (
                 <div className="w-24 h-36 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0">
-                  <Film className="w-8 h-8 text-zinc-400" />
+                  <PiFilmSlateBold className="w-8 h-8 text-zinc-400" />
                 </div>
               )}
               <div className="flex-1 min-w-0 space-y-2.5 text-center sm:text-left">
@@ -899,92 +686,14 @@ export const CsRouletteModal: React.FC<CsRouletteModalProps> = ({
                     }}
                     className="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-opacity hover:opacity-90 cursor-pointer"
                   >
-                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <PiPlayFill className="w-3.5 h-3.5" />
                     <span>{t.watchTrailerAndDetails}</span>
                   </button>
                 </div>
               </div>
             </div>
-          )}
-
-          {/* Remaining Active Movies in Tape List */}
-          {activePool.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-sans text-xs font-bold tracking-wider uppercase text-[var(--text-muted)]">
-                  {t.allMoviesInTape} ({activePool.length})
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {activePool.map((item) => {
-                  const itemTitle = getMovieTitle(item.movie, language);
-                  const weight = item.movie.rouletteWeight || 1;
-                  return (
-                    <div
-                      key={item.movie.id}
-                      className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)]"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {item.movie.posterPath ? (
-                          <img
-                            src={item.movie.posterPath}
-                            alt={itemTitle}
-                            referrerPolicy="no-referrer"
-                            className="w-10 h-14 object-cover rounded-xl shrink-0"
-                          />
-                        ) : (
-                          <div className="w-10 h-14 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0">
-                            <Film className="w-4 h-4 text-zinc-400" />
-                          </div>
-                        )}
-                        <div className="min-w-0 space-y-0.5">
-                          <div className="font-sans text-sm font-semibold truncate">
-                            {itemTitle}
-                          </div>
-                          <div className="text-xs text-[var(--text-muted)] tabular-nums">
-                            {item.movie.releaseYear} · {item.movie.runtime}{' '}
-                            {t.minUnit} · IMDb {item.movie.ratings.imdb.score}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1 shrink-0">
-                        {onToggleCandidateWeight && (
-                          <button
-                            type="button"
-                            disabled={isRolling}
-                            title={t.weightTooltip}
-                            onClick={() =>
-                              onToggleCandidateWeight(item.movie.id)
-                            }
-                            className={`px-2 py-1 rounded-lg font-sans text-xs font-extrabold tabular-nums transition-colors cursor-pointer disabled:opacity-40 ${
-                              weight > 1
-                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                                : 'bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border-subtle)]'
-                            }`}
-                          >
-                            ×{weight}
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
-                          disabled={isRolling}
-                          onClick={() => onRemoveCandidate(item.movie.id)}
-                          aria-label={t.deleteMovieTitle}
-                          className="p-2 rounded-xl text-[var(--text-muted)] hover:text-rose-500 transition-colors cursor-pointer shrink-0"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

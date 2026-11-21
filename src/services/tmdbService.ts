@@ -259,35 +259,51 @@ export interface AdvancedSearchParams {
   yearFrom: number;
   yearTo: number;
   minRating: number;
-  sortBy: 'popularity.desc' | 'vote_average.desc' | 'primary_release_date.desc';
+  maxRuntime?: number;
+  minRuntime?: number;
+  page?: number;
+  sortBy:
+    | 'popularity.desc'
+    | 'vote_average.desc'
+    | 'primary_release_date.desc'
+    | 'vote_count.desc';
   apiKey?: string;
 }
 
 export async function advancedSearchTmdb(
   params: AdvancedSearchParams
-): Promise<{ results: MovieItem[]; hasApiKey: boolean }> {
-  const { query, genreIds, yearFrom, yearTo, minRating, sortBy, apiKey } =
-    params;
+): Promise<{ results: MovieItem[]; hasApiKey: boolean; hasMore: boolean }> {
+  const {
+    query,
+    genreIds,
+    yearFrom,
+    yearTo,
+    minRating,
+    maxRuntime,
+    minRuntime,
+    page = 1,
+    sortBy,
+    apiKey,
+  } = params;
   const validKey = Boolean(apiKey && apiKey.trim().length > 5);
+  const trimmedQuery = query.trim();
 
   if (!validKey || !apiKey) {
-    return { results: [], hasApiKey: false };
+    return { results: [], hasApiKey: false, hasMore: false };
   }
-
-  const trimmedQuery = query.trim();
 
   try {
     if (trimmedQuery) {
       const enEndpoint = appendApiKeyParam(
         `${TMDB_BASE_URL}/search/movie?query=${encodeURIComponent(
           trimmedQuery
-        )}&language=en-US&include_adult=false&page=1`,
+        )}&language=en-US&include_adult=false&page=${page}`,
         apiKey
       );
       const ukEndpoint = appendApiKeyParam(
         `${TMDB_BASE_URL}/search/movie?query=${encodeURIComponent(
           trimmedQuery
-        )}&language=uk-UA&include_adult=false&page=1`,
+        )}&language=uk-UA&include_adult=false&page=${page}`,
         apiKey
       );
 
@@ -296,7 +312,7 @@ export async function advancedSearchTmdb(
         fetch(ukEndpoint, { headers: buildAuthHeaders(apiKey) }),
       ]);
 
-      if (!enRes.ok) return { results: [], hasApiKey: true };
+      if (!enRes.ok) return { results: [], hasApiKey: true, hasMore: false };
 
       const enData = await enRes.json();
       const ukData = ukRes.ok ? await ukRes.json() : { results: [] };
@@ -338,12 +354,17 @@ export async function advancedSearchTmdb(
         return mapBilingualTmdbToMovieItem(rawEn, rawUk);
       });
 
-      return { results: mapped, hasApiKey: true };
+      const totalPages = Number(enData.total_pages || 1);
+      return {
+        results: mapped,
+        hasApiKey: true,
+        hasMore: page < totalPages && rawList.length >= 15,
+      };
     } else {
       const discoverParams = new URLSearchParams({
         include_adult: 'false',
         include_video: 'false',
-        page: '1',
+        page: String(page),
         sort_by: sortBy,
         'primary_release_date.gte': `${yearFrom}-01-01`,
         'primary_release_date.lte': `${yearTo}-12-31`,
@@ -352,11 +373,19 @@ export async function advancedSearchTmdb(
       if (genreIds.length > 0) {
         discoverParams.set('with_genres', genreIds.join(','));
       }
+      if (maxRuntime && maxRuntime > 0) {
+        discoverParams.set('with_runtime.lte', String(maxRuntime));
+      }
+      if (minRuntime && minRuntime > 0) {
+        discoverParams.set('with_runtime.gte', String(minRuntime));
+      }
       if (minRating > 0) {
         discoverParams.set('vote_average.gte', String(minRating));
-        discoverParams.set('vote_count.gte', '30');
+        discoverParams.set('vote_count.gte', '50');
       } else if (sortBy === 'vote_average.desc') {
-        discoverParams.set('vote_count.gte', '150');
+        discoverParams.set('vote_count.gte', '200');
+      } else if (sortBy === 'primary_release_date.desc') {
+        discoverParams.set('vote_count.gte', '15');
       }
 
       const enEndpoint = appendApiKeyParam(
@@ -373,7 +402,7 @@ export async function advancedSearchTmdb(
         fetch(ukEndpoint, { headers: buildAuthHeaders(apiKey) }),
       ]);
 
-      if (!enRes.ok) return { results: [], hasApiKey: true };
+      if (!enRes.ok) return { results: [], hasApiKey: true, hasMore: false };
 
       const enData = await enRes.json();
       const ukData = ukRes.ok ? await ukRes.json() : { results: [] };
@@ -392,10 +421,15 @@ export async function advancedSearchTmdb(
         return mapBilingualTmdbToMovieItem(rawEn, rawUk);
       });
 
-      return { results: mapped, hasApiKey: true };
+      const totalPages = Number(enData.total_pages || 1);
+      return {
+        results: mapped,
+        hasApiKey: true,
+        hasMore: page < totalPages && mapped.length >= 15,
+      };
     }
   } catch {
-    return { results: [], hasApiKey: true };
+    return { results: [], hasApiKey: true, hasMore: false };
   }
 }
 

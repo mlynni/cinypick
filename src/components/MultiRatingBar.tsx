@@ -10,21 +10,28 @@ interface MultiRatingBarProps {
   variant?: 'compact' | 'detailed' | 'overlay';
 }
 
-/* Custom Brand SVG Icons for the 4 Rating Platforms */
+/* Crisp, High-Contrast Brand Icons optimized for small UI sizes */
 export const ImdbIcon: React.FC<{ className?: string }> = ({
-  className = 'w-4 h-4',
+  className = 'w-7 h-3.5',
 }) => (
   <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    className={className}
+    viewBox="0 0 40 20"
+    className={`${className} shrink-0`}
     aria-hidden="true"
   >
-    <rect width="24" height="24" rx="5" fill="#F5C518" />
-    <path
-      d="M12 5.5L13.9 9.6L18.4 10.2L15.1 13.3L15.9 17.8L12 15.6L8.1 17.8L8.9 13.3L5.6 10.2L10.1 9.6L12 5.5Z"
-      fill="#09090B"
-    />
+    <rect width="40" height="20" rx="4" fill="#F5C518" />
+    <text
+      x="20"
+      y="14.5"
+      textAnchor="middle"
+      fill="#000000"
+      fontFamily="Impact, 'Arial Black', Inter, sans-serif"
+      fontWeight="900"
+      fontSize="12.5"
+      letterSpacing="0.4"
+    >
+      IMDb
+    </text>
   </svg>
 );
 
@@ -33,44 +40,74 @@ export const RottenTomatoesIcon: React.FC<{ className?: string }> = ({
 }) => (
   <svg
     viewBox="0 0 24 24"
-    fill="none"
-    className={className}
+    className={`${className} shrink-0`}
     aria-hidden="true"
   >
-    <circle cx="12" cy="13.5" r="8" fill="#FA320A" />
+    {/* Tomato body */}
     <path
-      d="M12 4.5C10.2 4.5 8.8 5.8 8.5 7.2C10 6.5 11.2 7 12 7.8C12.8 7 14 6.5 15.5 7.2C15.2 5.8 13.8 4.5 12 4.5Z"
-      fill="#22C55E"
+      d="M12 5.5C6.8 5.5 3 9 3 13.8C3 18.8 7 22 12 22C17 22 21 18.8 21 13.8C21 9 17.2 5.5 12 5.5Z"
+      fill="#FA320A"
+    />
+    {/* Crisp highlight */}
+    <path
+      d="M6.5 12.5C6.5 10.3 8.1 8.6 10.2 8.2"
+      stroke="#FF8A70"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      fill="none"
+    />
+    {/* Green stem & leaves */}
+    <path
+      d="M12 1.8V6M12 5.5L8.2 3.2M12 5.5L15.8 3.2M12 5.8L6.8 6.8M12 5.8L17.2 6.8"
+      stroke="#00E054"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
   </svg>
 );
 
 export const LetterboxdIcon: React.FC<{ className?: string }> = ({
-  className = 'w-4.5 h-4',
+  className = 'w-6 h-2.5',
 }) => (
   <svg
-    viewBox="0 0 28 20"
-    fill="none"
-    className={className}
+    viewBox="0 0 32 12"
+    className={`${className} shrink-0`}
     aria-hidden="true"
   >
-    <circle cx="6.5" cy="10" r="5.5" fill="#FF8000" />
-    <circle cx="14" cy="10" r="5.5" fill="#00E054" />
-    <circle cx="21.5" cy="10" r="5.5" fill="#40BCF4" />
+    <circle cx="6" cy="6" r="5.5" fill="#FF8000" />
+    <circle cx="16" cy="6" r="5.5" fill="#00E054" />
+    <circle cx="26" cy="6" r="5.5" fill="#40BCF4" />
   </svg>
 );
 
 export const TmdbIcon: React.FC<{ className?: string }> = ({
-  className = 'w-4 h-4',
+  className = 'w-8 h-3.5',
 }) => (
   <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    className={className}
+    viewBox="0 0 46 20"
+    className={`${className} shrink-0`}
     aria-hidden="true"
   >
-    <rect width="24" height="24" rx="6" fill="#01B4E4" />
-    <circle cx="12" cy="12" r="5" fill="#90CEA1" />
+    <defs>
+      <linearGradient id="tmdbGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stopColor="#90CEA1" />
+        <stop offset="100%" stopColor="#01B4E4" />
+      </linearGradient>
+    </defs>
+    <rect width="46" height="20" rx="4" fill="url(#tmdbGrad)" />
+    <text
+      x="23"
+      y="14.5"
+      textAnchor="middle"
+      fill="#032541"
+      fontFamily="'Arial Black', Inter, sans-serif"
+      fontWeight="900"
+      fontSize="11.5"
+      letterSpacing="0.5"
+    >
+      TMDB
+    </text>
   </svg>
 );
 
@@ -99,7 +136,7 @@ export const MultiRatingBar: React.FC<MultiRatingBarProps> = ({
     return (
       <div className="flex items-center justify-between gap-1.5 font-mono-tabular text-[13px] sm:text-sm font-bold text-[var(--text-main)]">
         <RatingItemWithTooltip label="IMDb">
-          <ImdbIcon className="w-4 h-4 shrink-0" />
+          <ImdbIcon className="w-7 h-3.5 shrink-0" />
           <span>{ratings.imdb.score.toFixed(1)}</span>
         </RatingItemWithTooltip>
 
@@ -109,12 +146,12 @@ export const MultiRatingBar: React.FC<MultiRatingBarProps> = ({
         </RatingItemWithTooltip>
 
         <RatingItemWithTooltip label="Letterboxd">
-          <LetterboxdIcon className="w-4.5 h-4 shrink-0" />
+          <LetterboxdIcon className="w-6 h-2.5 shrink-0" />
           <span>{ratings.letterboxd.score.toFixed(1)}</span>
         </RatingItemWithTooltip>
 
         <RatingItemWithTooltip label="TMDb">
-          <TmdbIcon className="w-4 h-4 shrink-0" />
+          <TmdbIcon className="w-8 h-3.5 shrink-0" />
           <span>{ratings.tmdb.score.toFixed(1)}</span>
         </RatingItemWithTooltip>
       </div>
@@ -125,7 +162,7 @@ export const MultiRatingBar: React.FC<MultiRatingBarProps> = ({
     return (
       <div className="flex items-center justify-between pt-2.5 font-mono-tabular text-sm font-bold">
         <RatingItemWithTooltip label="IMDb">
-          <ImdbIcon className="w-4 h-4 shrink-0" />
+          <ImdbIcon className="w-7 h-3.5 shrink-0" />
           <span>{ratings.imdb.score.toFixed(1)}</span>
         </RatingItemWithTooltip>
 
@@ -135,12 +172,12 @@ export const MultiRatingBar: React.FC<MultiRatingBarProps> = ({
         </RatingItemWithTooltip>
 
         <RatingItemWithTooltip label="Letterboxd">
-          <LetterboxdIcon className="w-4.5 h-4 shrink-0" />
+          <LetterboxdIcon className="w-6 h-2.5 shrink-0" />
           <span>{ratings.letterboxd.score.toFixed(1)}</span>
         </RatingItemWithTooltip>
 
         <RatingItemWithTooltip label="TMDb">
-          <TmdbIcon className="w-4 h-4 shrink-0" />
+          <TmdbIcon className="w-8 h-3.5 shrink-0" />
           <span>{ratings.tmdb.score.toFixed(1)}</span>
         </RatingItemWithTooltip>
       </div>
@@ -168,7 +205,7 @@ export const MultiRatingBar: React.FC<MultiRatingBarProps> = ({
       >
         <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
           <span className="flex items-center gap-2 font-bold text-sm text-[var(--text-main)]">
-            <ImdbIcon className="w-4 h-4" />
+            <ImdbIcon className="w-7 h-3.5" />
             <span>IMDb</span>
           </span>
           <span className="text-sm opacity-60 group-hover:opacity-100">↗</span>
@@ -192,7 +229,7 @@ export const MultiRatingBar: React.FC<MultiRatingBarProps> = ({
       >
         <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
           <span className="flex items-center gap-2 font-bold text-sm text-[var(--text-main)]">
-            <RottenTomatoesIcon className="w-4 h-4" />
+            <RottenTomatoesIcon className="w-4.5 h-4.5" />
             <span>Rotten Tomatoes</span>
           </span>
           <span className="text-sm opacity-60 group-hover:opacity-100">↗</span>
@@ -219,7 +256,7 @@ export const MultiRatingBar: React.FC<MultiRatingBarProps> = ({
       >
         <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
           <span className="flex items-center gap-2 font-bold text-sm text-[var(--text-main)]">
-            <LetterboxdIcon className="w-5 h-4" />
+            <LetterboxdIcon className="w-6 h-2.5" />
             <span>Letterboxd</span>
           </span>
           <span className="text-sm opacity-60 group-hover:opacity-100">↗</span>
@@ -244,7 +281,7 @@ export const MultiRatingBar: React.FC<MultiRatingBarProps> = ({
       >
         <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
           <span className="flex items-center gap-2 font-bold text-sm text-[var(--text-main)]">
-            <TmdbIcon className="w-4 h-4" />
+            <TmdbIcon className="w-8 h-3.5" />
             <span>TMDb</span>
           </span>
           <span className="text-sm opacity-60 group-hover:opacity-100">↗</span>

@@ -1,23 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import {
-  X,
-  Settings,
-  Check,
-  RefreshCw,
-  CheckCircle2,
-  AlertCircle,
-  ExternalLink,
-  KeyRound,
-  Search,
-  Sparkles,
-  Trash2,
-  Film,
-  Plus,
-  ChevronDown,
-  Copy,
-  Download,
-  ArrowRightLeft,
-} from 'lucide-react';
+  PiArrowsClockwiseBold,
+  PiArrowsLeftRightBold,
+  PiArrowSquareOutBold,
+  PiCaretDownBold,
+  PiCheckBold,
+  PiCheckCircleFill,
+  PiCopyBold,
+  PiDownloadSimpleBold,
+  PiFilmSlateBold,
+  PiGearSixBold,
+  PiKeyBold,
+  PiMagnifyingGlassBold,
+  PiPlusBold,
+  PiSparkleBold,
+  PiTrashBold,
+  PiWarningCircleFill,
+  PiXBold,
+} from 'react-icons/pi';
 import {
   AppLanguage,
   ColorThemeId,
@@ -356,7 +356,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
           <div className="flex items-center gap-2">
-            <Settings className="w-4 h-4" />
+            <PiGearSixBold className="w-4 h-4" />
             <h3 className="font-display text-sm sm:text-base font-bold tracking-wider uppercase">
               {t.settingsTitle}
             </h3>
@@ -367,7 +367,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
             aria-label="Close"
             className="p-1.5 rounded-xl text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <PiXBold className="w-4 h-4" />
           </button>
         </div>
 
@@ -404,7 +404,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
                     <span>{item.name}</span>
                   </div>
 
-                  {active && <Check className="w-4 h-4" />}
+                  {active && <PiCheckBold className="w-4 h-4" />}
                 </button>
               );
             })}
@@ -461,14 +461,14 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
         {/* 3. Secret Movie Override */}
         <div className="space-y-2.5 pt-3 border-t border-[var(--border-subtle)]">
           <span className="font-sans text-[11px] font-bold tracking-wider uppercase text-[var(--text-muted)] flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5" />
+            <PiSparkleBold className="w-3.5 h-3.5" />
             <span>{t.secretMovieTitle}</span>
           </span>
 
           {!secretOverride.movie ? (
             <div className="space-y-2 relative">
               <form onSubmit={handleAddCustomSecretMovie} className="relative">
-                <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <PiMagnifyingGlassBold className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={secretQuery}
@@ -481,7 +481,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
                     type="submit"
                     className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-lg bg-white text-black cursor-pointer"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <PiPlusBold className="w-3.5 h-3.5" />
                   </button>
                 )}
               </form>
@@ -512,7 +512,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
                             />
                           ) : (
                             <div className="w-8 h-12 rounded-md bg-zinc-800 flex items-center justify-center shrink-0">
-                              <Film className="w-4 h-4 text-zinc-400" />
+                              <PiFilmSlateBold className="w-4 h-4 text-zinc-400" />
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
@@ -557,7 +557,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
                     />
                   ) : (
                     <div className="w-10 h-14 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0">
-                      <Film className="w-4 h-4 text-zinc-400" />
+                      <PiFilmSlateBold className="w-4 h-4 text-zinc-400" />
                     </div>
                   )}
                   <div className="min-w-0 space-y-0.5">
@@ -582,7 +582,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
                   aria-label={t.secretMovieRemove}
                   className="p-2 rounded-xl text-[var(--text-muted)] hover:text-rose-400 transition-colors cursor-pointer shrink-0"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <PiTrashBold className="w-4 h-4" />
                 </button>
               </div>
 
@@ -618,7 +618,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
             className="w-full flex items-center justify-between py-1 text-left cursor-pointer group"
           >
             <div className="flex items-center gap-2">
-              <KeyRound className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+              <PiKeyBold className="w-3.5 h-3.5 text-[var(--text-muted)]" />
               <span className="font-sans text-[11px] font-bold tracking-wider uppercase text-[var(--text-muted)] group-hover:text-[var(--text-main)] transition-colors">
                 {t.tmdbLabel}
               </span>
@@ -630,7 +630,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
               )}
             </div>
 
-            <ChevronDown
+            <PiCaretDownBold
               className={`w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--text-main)] transition-transform duration-200 ${
                 isTmdbExpanded ? 'rotate-180' : ''
               }`}
@@ -653,7 +653,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
                   onClick={handleTestKey}
                   className="px-3 py-2 rounded-xl bg-[var(--bg-subcard)] hover:opacity-80 border border-[var(--border-subtle)] text-xs font-semibold flex items-center gap-1 shrink-0 cursor-pointer"
                 >
-                  <RefreshCw
+                  <PiArrowsClockwiseBold
                     className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`}
                   />
                   <span>{t.testBtn}</span>
@@ -668,7 +668,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
                   className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:underline inline-flex items-center gap-1 font-medium"
                 >
                   <span>{t.getApiKey}</span>
-                  <ExternalLink className="w-3 h-3" />
+                  <PiArrowSquareOutBold className="w-3 h-3" />
                 </a>
               </div>
 
@@ -681,9 +681,9 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
                   }`}
                 >
                   {testResult.ok ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <PiCheckCircleFill className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   ) : (
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <PiWarningCircleFill className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   )}
                   <span>{testResult.message}</span>
                 </div>
@@ -696,7 +696,7 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
         <div className="space-y-2.5 pt-3 border-t border-[var(--border-subtle)]">
           <div className="flex items-center justify-between">
             <span className="font-sans text-[11px] font-bold tracking-wider uppercase text-[var(--text-muted)] flex items-center gap-1.5">
-              <ArrowRightLeft className="w-3.5 h-3.5" />
+              <PiArrowsLeftRightBold className="w-3.5 h-3.5" />
               <span>{t.sessionCodeLabel}</span>
             </span>
           </div>
@@ -712,9 +712,9 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
             }`}
           >
             {copiedSessionHash ? (
-              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+              <PiCheckBold className="w-3.5 h-3.5" />
             ) : (
-              <Copy className="w-3.5 h-3.5" />
+              <PiCopyBold className="w-3.5 h-3.5" />
             )}
             <span>
               {copiedSessionHash
@@ -740,9 +740,9 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
               className="px-3.5 py-2 rounded-xl bg-[var(--bg-subcard)] hover:opacity-85 disabled:opacity-40 border border-[var(--border-subtle)] text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-opacity cursor-pointer disabled:cursor-not-allowed"
             >
               {loadingSessionHash ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <PiArrowsClockwiseBold className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <Download className="w-3.5 h-3.5" />
+                <PiDownloadSimpleBold className="w-3.5 h-3.5" />
               )}
               <span>{t.sessionLoadBtn}</span>
             </button>
@@ -757,9 +757,9 @@ export const SettingsPopover: React.FC<SettingsPopoverProps> = ({
               }`}
             >
               {sessionStatus.ok ? (
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <PiCheckCircleFill className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               ) : (
-                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <PiWarningCircleFill className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               )}
               <span>{sessionStatus.message}</span>
             </div>

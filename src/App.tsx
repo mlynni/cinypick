@@ -1,18 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Settings,
-  Dices,
-  Plus,
-  Search,
-  Trash2,
-  Film,
-  Check,
-  Bookmark,
-  SlidersHorizontal,
-  ListFilter,
-  RotateCcw,
-  Sparkles,
-} from 'lucide-react';
+  PiArrowCounterClockwiseBold,
+  PiBookmarkSimpleBold,
+  PiBookmarkSimpleFill,
+  PiCheckBold,
+  PiDiceFiveBold,
+  PiEyeBold,
+  PiEyeFill,
+  PiFilmSlateBold,
+  PiFunnelBold,
+  PiGearSixBold,
+  PiMagnifyingGlassBold,
+  PiPlusBold,
+  PiSlidersHorizontalBold,
+  PiTrashBold,
+  PiXBold,
+} from 'react-icons/pi';
 import {
   ColorThemeId,
   MovieItem,
@@ -153,16 +156,22 @@ export default function App() {
   const lang = tmdbConfig.language;
   const t = UI_TEXT[lang];
 
-  // Active View Tab: 'pool' (Movies) vs 'wishlist' (Wishlist)
-  const [activeListTab, setActiveListTab] = useState<'pool' | 'wishlist'>(
-    'pool'
-  );
+  // Active View Tab: 'pool' (Library) vs 'watched' (Watched) vs 'wishlist' (Wishlist)
+  const [activeListTab, setActiveListTab] = useState<
+    'pool' | 'watched' | 'wishlist'
+  >('pool');
 
   // Filter & Sort state for the active list
   const [listFilter, setListFilter] = useState<ListFilterMode>('all');
   const [listSort, setListSort] = useState<ListSortMode>('default');
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState<boolean>(false);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Multi-select Deletion Mode triggered by clicking "Очистити список"
+  const [isSelectionMode, setIsSelectionMode] = useState<boolean>(false);
+  const [selectedForDeleteIds, setSelectedForDeleteIds] = useState<string[]>(
+    []
+  );
 
   // Personal Movie List (Starts empty)
   const [myMovies, setMyMovies] = useState<MovieItem[]>(() => {
@@ -232,6 +241,7 @@ export default function App() {
     movie: MovieItem;
     autoPlayTrailer: boolean;
   } | null>(null);
+  const [movieDetailHistory, setMovieDetailHistory] = useState<MovieItem[]>([]);
 
   // Undo / Notification Toast state
   const [toastBanner, setToastBanner] = useState<{
@@ -265,11 +275,15 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isFilterMenuOpen]);
 
-  // Reset tab-specific filters when switching between Pool and Wishlist
-  const handleSwitchListTab = (nextTab: 'pool' | 'wishlist') => {
+  // Reset tab-specific filters when switching between Library, Watched, and Wishlist
+  const handleSwitchListTab = (nextTab: 'pool' | 'watched' | 'wishlist') => {
     setActiveListTab(nextTab);
     setIsFilterMenuOpen(false);
-    if (
+    setIsSelectionMode(false);
+    setSelectedForDeleteIds([]);
+    if (nextTab === 'watched' && listFilter !== 'all' && listFilter !== 'rated') {
+      setListFilter('all');
+    } else if (
       nextTab === 'wishlist' &&
       (listFilter === 'active_roulette' ||
         listFilter === 'chosen_bw' ||
@@ -279,7 +293,9 @@ export default function App() {
       setListFilter('all');
     } else if (
       nextTab === 'pool' &&
-      (listFilter === 'in_pool' || listFilter === 'not_in_pool')
+      (listFilter === 'in_pool' ||
+        listFilter === 'not_in_pool' ||
+        listFilter === 'watched')
     ) {
       setListFilter('all');
     }
@@ -361,7 +377,10 @@ export default function App() {
   }, [searchQuery, tmdbConfig]);
 
   const isMovieInPool = (movieId: string) =>
-    myMovies.some((m) => m.id === movieId);
+    myMovies.some((m) => m.id === movieId && !m.isWatched);
+
+  const isMovieInWatched = (movieId: string) =>
+    myMovies.some((m) => m.id === movieId && Boolean(m.isWatched));
 
   const isMovieInWishlist = (movieId: string) =>
     wishlistMovies.some((m) => m.id === movieId);
@@ -376,10 +395,12 @@ export default function App() {
   };
 
   const handleAddMovieToActiveList = async (movie: MovieItem) => {
+    const isAddingToWatched = activeListTab === 'watched';
     let finalMovie: MovieItem = {
       ...movie,
       isChosen: false,
-      excludeFromRoulette: false,
+      isWatched: isAddingToWatched,
+      excludeFromRoulette: isAddingToWatched,
     };
     if (tmdbConfig.customApiKey.trim().length > 5) {
       const enriched = await fetchTmdbMovieDetails(
@@ -389,7 +410,8 @@ export default function App() {
       finalMovie = {
         ...enriched,
         isChosen: false,
-        excludeFromRoulette: false,
+        isWatched: isAddingToWatched,
+        excludeFromRoulette: isAddingToWatched,
       };
     }
 
@@ -400,9 +422,36 @@ export default function App() {
           ? [...prev, finalMovie]
           : [finalMovie, ...prev];
       });
+    } else if (activeListTab === 'watched') {
+      setMyMovies((prev) => {
+        if (prev.some((m) => m.id === finalMovie.id)) {
+          return prev.map((m) =>
+            m.id === finalMovie.id
+              ? {
+                  ...m,
+                  isWatched: true,
+                  isChosen: false,
+                  excludeFromRoulette: true,
+                }
+              : m
+          );
+        }
+        return [finalMovie, ...prev];
+      });
     } else {
       setMyMovies((prev) => {
-        if (prev.some((m) => m.id === finalMovie.id)) return prev;
+        if (prev.some((m) => m.id === finalMovie.id)) {
+          return prev.map((m) =>
+            m.id === finalMovie.id
+              ? {
+                  ...m,
+                  isWatched: false,
+                  isChosen: false,
+                  excludeFromRoulette: false,
+                }
+              : m
+          );
+        }
         return [finalMovie, ...prev];
       });
       moveWishlistItemToEnd(finalMovie.id);
@@ -416,6 +465,7 @@ export default function App() {
     let finalMovie: MovieItem = {
       ...movie,
       isChosen: false,
+      isWatched: false,
       excludeFromRoulette: false,
     };
     if (tmdbConfig.customApiKey.trim().length > 5) {
@@ -426,13 +476,38 @@ export default function App() {
       finalMovie = {
         ...enriched,
         isChosen: false,
+        isWatched: false,
         excludeFromRoulette: false,
       };
     }
     setMyMovies((prev) => {
-      if (prev.some((m) => m.id === finalMovie.id)) return prev;
+      if (prev.some((m) => m.id === finalMovie.id)) {
+        return prev.map((m) =>
+          m.id === finalMovie.id
+            ? {
+                ...m,
+                isWatched: false,
+                isChosen: false,
+                excludeFromRoulette: false,
+              }
+            : m
+        );
+      }
       return [finalMovie, ...prev];
     });
+    setSelectedMovieModal((prev) =>
+      prev && prev.movie.id === finalMovie.id
+        ? {
+            ...prev,
+            movie: {
+              ...prev.movie,
+              isWatched: false,
+              isChosen: false,
+              excludeFromRoulette: false,
+            },
+          }
+        : prev
+    );
     moveWishlistItemToEnd(finalMovie.id);
   };
 
@@ -445,7 +520,12 @@ export default function App() {
       return;
     }
 
-    const customMovie = createCustomMovieItem(searchQuery.trim());
+    const isAddingToWatched = activeListTab === 'watched';
+    const customMovie: MovieItem = {
+      ...createCustomMovieItem(searchQuery.trim()),
+      isWatched: isAddingToWatched,
+      excludeFromRoulette: isAddingToWatched,
+    };
     if (activeListTab === 'wishlist') {
       setWishlistMovies((prev) => [customMovie, ...prev]);
     } else {
@@ -463,6 +543,85 @@ export default function App() {
         isMovieInPool(movie.id) ? [...prev, movie] : [movie, ...prev]
       );
     }
+  };
+
+  const handleToggleWatchedDirect = async (movie: MovieItem) => {
+    if (isMovieInWatched(movie.id)) {
+      setMyMovies((prev) =>
+        prev.map((m) =>
+          m.id === movie.id
+            ? {
+                ...m,
+                isWatched: false,
+                isChosen: false,
+                excludeFromRoulette: false,
+              }
+            : m
+        )
+      );
+      setSelectedMovieModal((prev) =>
+        prev && prev.movie.id === movie.id
+          ? {
+              ...prev,
+              movie: {
+                ...prev.movie,
+                isWatched: false,
+                isChosen: false,
+                excludeFromRoulette: false,
+              },
+            }
+          : prev
+      );
+      return;
+    }
+
+    let finalMovie: MovieItem = {
+      ...movie,
+      isChosen: false,
+      isWatched: true,
+      excludeFromRoulette: true,
+    };
+    if (tmdbConfig.customApiKey.trim().length > 5) {
+      const enriched = await fetchTmdbMovieDetails(
+        movie,
+        tmdbConfig.customApiKey
+      );
+      finalMovie = {
+        ...enriched,
+        isChosen: false,
+        isWatched: true,
+        excludeFromRoulette: true,
+      };
+    }
+
+    setMyMovies((prev) => {
+      if (prev.some((m) => m.id === finalMovie.id)) {
+        return prev.map((m) =>
+          m.id === finalMovie.id
+            ? {
+                ...m,
+                isWatched: true,
+                isChosen: false,
+                excludeFromRoulette: true,
+              }
+            : m
+        );
+      }
+      return [finalMovie, ...prev];
+    });
+    setSelectedMovieModal((prev) =>
+      prev && prev.movie.id === finalMovie.id
+        ? {
+            ...prev,
+            movie: {
+              ...prev.movie,
+              isWatched: true,
+              isChosen: false,
+              excludeFromRoulette: true,
+            },
+          }
+        : prev
+    );
   };
 
   // When adding a movie from Wishlist to Pool, its icon turns green (Check) and the movie moves to the end of the Wishlist
@@ -674,6 +833,42 @@ export default function App() {
     }
   };
 
+  const handleToggleSelectForDelete = (movieId: string) => {
+    setSelectedForDeleteIds((prev) =>
+      prev.includes(movieId)
+        ? prev.filter((id) => id !== movieId)
+        : [...prev, movieId]
+    );
+  };
+
+  const handleDeleteSelectedMovies = () => {
+    if (selectedForDeleteIds.length === 0) return;
+    const toRemoveSet = new Set(selectedForDeleteIds);
+
+    if (activeListTab === 'wishlist') {
+      const snapshot = [...wishlistMovies];
+      const count = wishlistMovies.filter((m) => toRemoveSet.has(m.id)).length;
+      setWishlistMovies((prev) => prev.filter((m) => !toRemoveSet.has(m.id)));
+      if (count > 0) {
+        showToast(`${t.movieRemovedToast} (${count})`, () => {
+          setWishlistMovies(snapshot);
+        });
+      }
+    } else {
+      const snapshot = [...myMovies];
+      const count = myMovies.filter((m) => toRemoveSet.has(m.id)).length;
+      setMyMovies((prev) => prev.filter((m) => !toRemoveSet.has(m.id)));
+      if (count > 0) {
+        showToast(`${t.movieRemovedToast} (${count})`, () => {
+          setMyMovies(snapshot);
+        });
+      }
+    }
+
+    setIsSelectionMode(false);
+    setSelectedForDeleteIds([]);
+  };
+
   const handleClearActiveList = () => {
     if (activeListTab === 'wishlist') {
       if (wishlistMovies.length === 0) return;
@@ -682,14 +877,25 @@ export default function App() {
       showToast(`${t.listClearedToast} (${snapshot.length})`, () => {
         setWishlistMovies(snapshot);
       });
-    } else {
-      if (myMovies.length === 0) return;
+    } else if (activeListTab === 'watched') {
+      const watchedToClear = myMovies.filter((m) => Boolean(m.isWatched));
+      if (watchedToClear.length === 0) return;
       const snapshot = [...myMovies];
-      setMyMovies([]);
-      showToast(`${t.listClearedToast} (${snapshot.length})`, () => {
+      setMyMovies((prev) => prev.filter((m) => !m.isWatched));
+      showToast(`${t.listClearedToast} (${watchedToClear.length})`, () => {
+        setMyMovies(snapshot);
+      });
+    } else {
+      const libraryToClear = myMovies.filter((m) => !m.isWatched);
+      if (libraryToClear.length === 0) return;
+      const snapshot = [...myMovies];
+      setMyMovies((prev) => prev.filter((m) => Boolean(m.isWatched)));
+      showToast(`${t.listClearedToast} (${libraryToClear.length})`, () => {
         setMyMovies(snapshot);
       });
     }
+    setIsSelectionMode(false);
+    setSelectedForDeleteIds([]);
   };
 
   // Merge imported session movies and wishlist with existing items (updating status & ratings on ID match)
@@ -785,8 +991,12 @@ export default function App() {
 
   const handleOpenMovieDetail = async (
     movie: MovieItem,
-    autoPlayTrailer = false
+    autoPlayTrailer = false,
+    preserveHistory = false
   ) => {
+    if (!preserveHistory) {
+      setMovieDetailHistory([]);
+    }
     setSelectedMovieModal({ movie, autoPlayTrailer });
     if (tmdbConfig.customApiKey.trim().length > 5) {
       const enriched = await fetchTmdbMovieDetails(
@@ -844,8 +1054,15 @@ export default function App() {
     }
   };
 
+  const libraryMovies = myMovies.filter((m) => !m.isWatched);
+  const watchedMovies = myMovies.filter((m) => Boolean(m.isWatched));
+
   const rawActiveList =
-    activeListTab === 'wishlist' ? wishlistMovies : myMovies;
+    activeListTab === 'wishlist'
+      ? wishlistMovies
+      : activeListTab === 'watched'
+      ? watchedMovies
+      : libraryMovies;
 
   // Apply Filter
   const filteredMovies = rawActiveList.filter((movie) => {
@@ -953,33 +1170,43 @@ export default function App() {
             ).length,
           },
         ]
+      : activeListTab === 'watched'
+      ? [
+          {
+            id: 'all',
+            label: t.filterAll,
+            count: watchedMovies.length,
+          },
+          {
+            id: 'rated',
+            label: t.filterRated,
+            count: watchedMovies.filter(
+              (m) => typeof m.userRating === 'number' && m.userRating > 0
+            ).length,
+          },
+        ]
       : [
           {
             id: 'all',
             label: t.filterAll,
-            count: myMovies.length,
+            count: libraryMovies.length,
           },
           {
             id: 'active_roulette',
             label: t.filterActiveRoulette,
-            count: myMovies.filter(
+            count: libraryMovies.filter(
               (m) => !m.isChosen && !m.isWatched && !m.excludeFromRoulette
             ).length,
           },
           {
             id: 'chosen_bw',
             label: t.filterChosenBw,
-            count: myMovies.filter((m) => Boolean(m.isChosen)).length,
-          },
-          {
-            id: 'watched',
-            label: t.filterWatched,
-            count: myMovies.filter((m) => Boolean(m.isWatched)).length,
+            count: libraryMovies.filter((m) => Boolean(m.isChosen)).length,
           },
           {
             id: 'rated',
             label: t.filterRated,
-            count: myMovies.filter(
+            count: libraryMovies.filter(
               (m) => typeof m.userRating === 'number' && m.userRating > 0
             ).length,
           },
@@ -1012,7 +1239,7 @@ export default function App() {
               aria-label={t.settings}
               className="group/btn relative w-10 h-10 rounded-xl bg-[var(--bg-subcard)] hover:opacity-85 border border-[var(--border-subtle)] flex items-center justify-center transition-opacity cursor-pointer"
             >
-              <Settings className="w-4.5 h-4.5" />
+              <PiGearSixBold className="w-4.5 h-4.5" />
               <span className="pointer-events-none absolute top-full right-0 mt-2 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
                 {t.settings}
               </span>
@@ -1031,7 +1258,7 @@ export default function App() {
                 onSubmit={handleAddCustomTitle}
                 className="relative flex-1 min-w-0"
               >
-                <Search className="w-4.5 h-4.5 text-[var(--text-muted)] absolute left-4 top-1/2 -translate-y-1/2" />
+                <PiMagnifyingGlassBold className="w-4.5 h-4.5 text-[var(--text-muted)] absolute left-4 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={searchQuery}
@@ -1048,7 +1275,7 @@ export default function App() {
                     }}
                     className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl font-sans text-xs font-semibold flex items-center gap-1 cursor-pointer"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <PiPlusBold className="w-3.5 h-3.5" />
                     <span>{t.addBtn}</span>
                   </button>
                 )}
@@ -1061,7 +1288,7 @@ export default function App() {
                 aria-label={t.advancedSearchBtn}
                 className="group/btn relative w-[50px] h-[50px] shrink-0 rounded-2xl bg-[var(--bg-subcard)] hover:opacity-90 border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all cursor-pointer"
               >
-                <SlidersHorizontal className="w-4.5 h-4.5" />
+                <PiSlidersHorizontalBold className="w-4.5 h-4.5" />
                 <span className="pointer-events-none absolute bottom-full right-0 mb-2 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
                   {t.advancedSearchBtn}
                 </span>
@@ -1081,6 +1308,8 @@ export default function App() {
                       const alreadyInActive =
                         activeListTab === 'wishlist'
                           ? isMovieInWishlist(item.id)
+                          : activeListTab === 'watched'
+                          ? isMovieInWatched(item.id)
                           : isMovieInPool(item.id);
                       const itemTitle = getMovieTitle(item, lang);
                       const altTitle = getMovieAltTitle(item, lang);
@@ -1102,7 +1331,7 @@ export default function App() {
                               />
                             ) : (
                               <div className="w-11 h-16 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0">
-                                <Film className="w-5 h-5 text-zinc-400" />
+                                <PiFilmSlateBold className="w-5 h-5 text-zinc-400" />
                               </div>
                             )}
                             <div className="min-w-0 space-y-0.5">
@@ -1137,12 +1366,12 @@ export default function App() {
                           >
                             {alreadyInActive ? (
                               <>
-                                <Check className="w-3.5 h-3.5" />
+                                <PiCheckBold className="w-3.5 h-3.5" />
                                 <span>{t.addedBtn}</span>
                               </>
                             ) : (
                               <>
-                                <Plus className="w-3.5 h-3.5" />
+                                <PiPlusBold className="w-3.5 h-3.5" />
                                 <span>{t.addBtn}</span>
                               </>
                             )}
@@ -1175,7 +1404,7 @@ export default function App() {
                         }}
                         className="px-4 py-2.5 rounded-xl text-xs font-semibold uppercase inline-flex items-center gap-1.5 cursor-pointer"
                       >
-                        <Plus className="w-4 h-4" />
+                        <PiPlusBold className="w-4 h-4" />
                         <span>
                           {t.addCustomBtn} «{searchQuery}»
                         </span>
@@ -1187,7 +1416,7 @@ export default function App() {
             )}
           </div>
 
-          {/* 2. Minimalist Cohesive "КРУТИТИ РУЛЕТКУ" Button + "ФІЛЬМИ" & Icon-Only Wishlist Switcher */}
+          {/* 2. Minimalist Cohesive "КРУТИТИ РУЛЕТКУ" Button + "БІБЛІОТЕКА" & Icon-Only Watched / Wishlist Switcher */}
           <div className="space-y-2.5 pt-3 border-t border-[var(--border-subtle)]">
             <button
               type="button"
@@ -1196,7 +1425,7 @@ export default function App() {
               className="w-full h-[52px] px-4 rounded-2xl bg-[var(--bg-subcard)] hover:bg-[var(--accent-primary)] text-[var(--text-main)] hover:text-[var(--accent-text)] border border-white/15 disabled:opacity-35 font-sans text-sm font-bold tracking-wider uppercase flex items-center justify-between transition-colors duration-150 cursor-pointer"
             >
               <span className="flex items-center gap-3">
-                <Dices className="w-4.5 h-4.5" />
+                <PiDiceFiveBold className="w-5 h-5" />
                 <span>{t.spinRoulette}</span>
               </span>
               <span className="tabular-nums text-xs font-bold px-2.5 py-1 rounded-lg bg-black/20 dark:bg-white/10">
@@ -1204,8 +1433,8 @@ export default function App() {
               </span>
             </button>
 
-            {/* "ФІЛЬМИ" Button + Icon-Only Wishlist Button right next to it */}
-            <div className="flex items-center gap-2.5 pt-1">
+            {/* "БІБЛІОТЕКА" Button + Icon-Only Watched Button + Icon-Only Wishlist Button */}
+            <div className="flex items-center gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => handleSwitchListTab('pool')}
@@ -1217,7 +1446,7 @@ export default function App() {
                       }
                     : undefined
                 }
-                className={`flex-1 h-[48px] px-4 rounded-2xl border border-[var(--border-subtle)] font-sans text-xs font-bold tracking-wider uppercase flex items-center justify-between transition-all cursor-pointer ${
+                className={`flex-1 min-w-0 h-[48px] px-4 rounded-2xl border border-[var(--border-subtle)] font-sans text-xs font-bold tracking-wider uppercase flex items-center justify-between transition-all cursor-pointer ${
                   activeListTab === 'pool'
                     ? ''
                     : 'bg-[var(--bg-subcard)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
@@ -1225,7 +1454,35 @@ export default function App() {
               >
                 <span className="truncate">{t.myMoviesTab}</span>
                 <span className="tabular-nums ml-1.5">
-                  {myMovies.length}
+                  {libraryMovies.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSwitchListTab('watched')}
+                aria-label={t.watchedTab}
+                style={
+                  activeListTab === 'watched'
+                    ? {
+                        backgroundColor: 'var(--accent-primary)',
+                        color: 'var(--accent-text)',
+                      }
+                    : undefined
+                }
+                className={`group/btn relative w-[48px] h-[48px] shrink-0 rounded-2xl border border-[var(--border-subtle)] flex items-center justify-center transition-all cursor-pointer ${
+                  activeListTab === 'watched'
+                    ? ''
+                    : 'bg-[var(--bg-subcard)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                {activeListTab === 'watched' ? (
+                  <PiEyeFill className="w-5 h-5" />
+                ) : (
+                  <PiEyeBold className="w-5 h-5" />
+                )}
+                <span className="pointer-events-none absolute bottom-full right-0 mb-2 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
+                  {t.watchedTab} ({watchedMovies.length})
                 </span>
               </button>
 
@@ -1247,11 +1504,11 @@ export default function App() {
                     : 'bg-[var(--bg-subcard)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
-                <Bookmark
-                  className={`w-4.5 h-4.5 ${
-                    activeListTab === 'wishlist' ? 'fill-current' : ''
-                  }`}
-                />
+                {activeListTab === 'wishlist' ? (
+                  <PiBookmarkSimpleFill className="w-5 h-5" />
+                ) : (
+                  <PiBookmarkSimpleBold className="w-5 h-5" />
+                )}
                 <span className="pointer-events-none absolute bottom-full right-0 mb-2 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
                   {t.wishlistTab} ({wishlistMovies.length})
                 </span>
@@ -1266,323 +1523,89 @@ export default function App() {
             <section className="min-h-[540px] rounded-[28px] bg-[var(--bg-card)] border border-[var(--border-subtle)] p-8 sm:p-12 flex flex-col items-center justify-center text-center space-y-4">
               <div className="w-16 h-16 rounded-3xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] flex items-center justify-center">
                 {activeListTab === 'wishlist' ? (
-                  <Bookmark className="w-7 h-7" />
+                  <PiBookmarkSimpleBold className="w-7 h-7" />
+                ) : activeListTab === 'watched' ? (
+                  <PiEyeBold className="w-7 h-7" />
                 ) : (
-                  <Film className="w-7 h-7" />
+                  <PiFilmSlateBold className="w-7 h-7" />
                 )}
               </div>
 
-              <div className="space-y-1.5 max-w-md">
-                <h2 className="font-display text-xl sm:text-2xl font-extrabold uppercase tracking-tight">
-                  {activeListTab === 'wishlist'
-                    ? t.emptyWishlistTitle
-                    : t.emptyPoolTitle}
-                </h2>
-                {activeListTab === 'pool' && (
-                  <p className="font-sans text-xs sm:text-sm text-[var(--text-muted)]">
-                    {t.emptyPoolHint}
-                  </p>
-                )}
-              </div>
-
-              {activeListTab === 'pool' && (
-                <button
-                  type="button"
-                  onClick={handleLoadStarterHits}
-                  style={{
-                    backgroundColor: 'var(--accent-primary)',
-                    color: 'var(--accent-text)',
-                  }}
-                  className="mt-2 px-5 py-3 rounded-2xl font-sans text-xs font-bold uppercase tracking-wider inline-flex items-center gap-2 transition-opacity hover:opacity-90 cursor-pointer shadow-sm"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>{t.loadStarterHitsBtn}</span>
-                </button>
-              )}
+              <h2 className="font-display text-xl sm:text-2xl font-extrabold uppercase tracking-tight">
+                {activeListTab === 'wishlist'
+                  ? t.emptyWishlistTitle
+                  : activeListTab === 'watched'
+                  ? t.emptyWatchedTitle
+                  : t.emptyPoolTitle}
+              </h2>
             </section>
           ) : (
             <section className="space-y-5">
-              {/* Top Section Header: "ФІЛЬМИ" / "СПИСОК БАЖАНОГО" on left, Filter Icon + "Очистити список" on top-right */}
+              {/* Top Section Header: "У РУЛЕТЦІ" / "ПЕРЕГЛЯНУТЕ" / "СПИСОК БАЖАНОГО" on left, Clear List Icon on top-right */}
               <div className="px-1 flex items-center justify-between gap-4">
                 <h2 className="font-display text-xl sm:text-2xl font-extrabold uppercase tracking-tight">
-                  {activeListTab === 'wishlist' ? t.wishlistTab : t.myMoviesTab}
+                  {activeListTab === 'wishlist'
+                    ? t.wishlistTab
+                    : activeListTab === 'watched'
+                    ? t.watchedTab
+                    : t.myMoviesTab}
                 </h2>
 
                 <div className="flex items-center gap-2">
-                  {/* Compact Filter & Sort Icon Button + Dropdown Menu */}
-                  <div ref={filterMenuRef} className="relative">
+                  {/* Clear List Icon-Only Button OR 2 Selection Mode Buttons ("Видалити обрані" + "Видалити все") */}
+                  {!isSelectionMode ? (
                     <button
                       type="button"
-                      onClick={() => setIsFilterMenuOpen((prev) => !prev)}
-                      aria-label={t.filterAndSortTitle}
-                      style={
-                        hasActiveFilterOrSort || isFilterMenuOpen
-                          ? {
-                              backgroundColor: 'var(--accent-primary)',
-                              color: 'var(--accent-text)',
-                            }
-                          : undefined
-                      }
-                      className={`group/btn relative w-9 h-9 rounded-xl border border-[var(--border-subtle)] flex items-center justify-center transition-all cursor-pointer ${
-                        hasActiveFilterOrSort || isFilterMenuOpen
-                          ? ''
-                          : 'bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                      }`}
+                      onClick={() => {
+                        setIsSelectionMode(true);
+                        setSelectedForDeleteIds([]);
+                      }}
+                      aria-label={t.clearList}
+                      className="group/btn relative w-9 h-9 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-rose-400 hover:text-rose-500 hover:border-rose-500/30 flex items-center justify-center transition-all cursor-pointer"
                     >
-                      <ListFilter className="w-4 h-4" />
-                      {hasActiveFilterOrSort && !isFilterMenuOpen && (
-                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-[var(--bg-page)]" />
-                      )}
-                      {!isFilterMenuOpen && (
-                        <span className="pointer-events-none absolute bottom-full right-0 mb-2 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
-                          {t.filterAndSortTitle}
-                        </span>
-                      )}
+                      <PiTrashBold className="w-4 h-4" />
+                      <span className="pointer-events-none absolute bottom-full right-0 mb-2 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
+                        {t.clearList}
+                      </span>
                     </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5 animate-in fade-in duration-150">
+                      <button
+                        type="button"
+                        disabled={selectedForDeleteIds.length === 0}
+                        onClick={handleDeleteSelectedMovies}
+                        className="h-9 px-3.5 rounded-xl bg-rose-500 hover:bg-rose-600 disabled:bg-[var(--bg-card)] text-white disabled:text-[var(--text-muted)] border border-rose-500 disabled:border-[var(--border-subtle)] font-sans text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+                      >
+                        <PiTrashBold className="w-4 h-4" />
+                        <span>
+                          {t.deleteSelectedBtn}
+                          {selectedForDeleteIds.length > 0
+                            ? ` (${selectedForDeleteIds.length})`
+                            : ''}
+                        </span>
+                      </button>
 
-                    {isFilterMenuOpen && (
-                      <div className="absolute right-0 top-full mt-2 w-64 sm:w-68 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-2xl p-3.5 space-y-3.5 z-40 animate-in fade-in zoom-in-95 duration-150">
-                        {/* 1. Compact 2x2 Filter Pills */}
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between px-0.5">
-                            <span className="font-sans text-[10px] font-bold tracking-wider uppercase text-[var(--text-muted)]">
-                              {t.filterSectionLabel}
-                            </span>
-                            {hasActiveFilterOrSort && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setListFilter('all');
-                                  setListSort('default');
-                                }}
-                                className="text-[10px] font-sans font-semibold text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
-                              >
-                                <RotateCcw className="w-2.5 h-2.5" />
-                                <span>{t.resetFilterBtn}</span>
-                              </button>
-                            )}
-                          </div>
+                      <button
+                        type="button"
+                        onClick={handleClearActiveList}
+                        className="h-9 px-3.5 rounded-xl bg-[var(--bg-card)] border border-rose-500/40 text-rose-400 hover:bg-rose-500 hover:text-white font-sans text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <span>{t.deleteAllBtn}</span>
+                      </button>
 
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {filterOptionsForTab.map((opt, idx) => {
-                              const active = listFilter === opt.id;
-                              const isLastOdd =
-                                filterOptionsForTab.length % 2 === 1 &&
-                                idx === filterOptionsForTab.length - 1;
-                              return (
-                                <button
-                                  key={opt.id}
-                                  type="button"
-                                  onClick={() => setListFilter(opt.id)}
-                                  style={
-                                    active
-                                      ? {
-                                          backgroundColor:
-                                            'var(--accent-primary)',
-                                          color: 'var(--accent-text)',
-                                        }
-                                      : undefined
-                                  }
-                                  className={`px-2.5 py-1.5 rounded-xl font-sans text-[11px] font-medium flex items-center justify-between gap-1.5 transition-colors cursor-pointer ${
-                                    isLastOdd ? 'col-span-2' : ''
-                                  } ${
-                                    active
-                                      ? 'font-bold'
-                                      : 'bg-[var(--bg-subcard)]/70 hover:bg-[var(--bg-subcard)] text-[var(--text-main)]'
-                                  }`}
-                                >
-                                  <span className="truncate">{opt.label}</span>
-                                  <span
-                                    className={`tabular-nums text-[10px] shrink-0 ${
-                                      active
-                                        ? 'opacity-80 font-bold'
-                                        : 'text-[var(--text-muted)]'
-                                    }`}
-                                  >
-                                    {opt.count}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* 2. Compact Sort Mode Selector + Platform / Year Sub-Switch */}
-                        <div className="space-y-2 pt-2.5 border-t border-[var(--border-subtle)]">
-                          <span className="font-sans text-[10px] font-bold tracking-wider uppercase text-[var(--text-muted)] block px-0.5">
-                            {t.sortSectionLabel}
-                          </span>
-
-                          {/* 3-Tab Sort Mode Switch */}
-                          <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-[var(--bg-subcard)]">
-                            <button
-                              type="button"
-                              onClick={() => setListSort('default')}
-                              style={
-                                listSort === 'default'
-                                  ? {
-                                      backgroundColor: 'var(--accent-primary)',
-                                      color: 'var(--accent-text)',
-                                    }
-                                  : undefined
-                              }
-                              className={`py-1.5 px-1.5 rounded-lg font-sans text-[11px] transition-colors truncate cursor-pointer ${
-                                listSort === 'default'
-                                  ? 'font-bold'
-                                  : 'font-medium text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                              }`}
-                            >
-                              {t.sortGroupDefault}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!isRatingSort) {
-                                  setListSort('imdb_desc');
-                                }
-                              }}
-                              style={
-                                isRatingSort
-                                  ? {
-                                      backgroundColor: 'var(--accent-primary)',
-                                      color: 'var(--accent-text)',
-                                    }
-                                  : undefined
-                              }
-                              className={`py-1.5 px-1.5 rounded-lg font-sans text-[11px] transition-colors truncate cursor-pointer ${
-                                isRatingSort
-                                  ? 'font-bold'
-                                  : 'font-medium text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                              }`}
-                            >
-                              {t.sortGroupRating}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!isYearSort) {
-                                  setListSort('year_desc');
-                                }
-                              }}
-                              style={
-                                isYearSort
-                                  ? {
-                                      backgroundColor: 'var(--accent-primary)',
-                                      color: 'var(--accent-text)',
-                                    }
-                                  : undefined
-                              }
-                              className={`py-1.5 px-1.5 rounded-lg font-sans text-[11px] transition-colors truncate cursor-pointer ${
-                                isYearSort
-                                  ? 'font-bold'
-                                  : 'font-medium text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                              }`}
-                            >
-                              {t.sortGroupYear}
-                            </button>
-                          </div>
-
-                          {/* Platform Picker when "За оцінкою" is active */}
-                          {isRatingSort && (
-                            <div className="grid grid-cols-5 gap-1 pt-0.5 animate-in fade-in duration-100">
-                              {[
-                                {
-                                  id: 'imdb_desc' as ListSortMode,
-                                  title: 'IMDb',
-                                  content: <ImdbIcon className="w-4 h-4" />,
-                                },
-                                {
-                                  id: 'rt_desc' as ListSortMode,
-                                  title: 'Rotten Tomatoes',
-                                  content: (
-                                    <RottenTomatoesIcon className="w-4 h-4" />
-                                  ),
-                                },
-                                {
-                                  id: 'lb_desc' as ListSortMode,
-                                  title: 'Letterboxd',
-                                  content: (
-                                    <LetterboxdIcon className="w-4.5 h-3.5" />
-                                  ),
-                                },
-                                {
-                                  id: 'tmdb_desc' as ListSortMode,
-                                  title: 'TMDb',
-                                  content: <TmdbIcon className="w-4 h-4" />,
-                                },
-                                {
-                                  id: 'user_rating_desc' as ListSortMode,
-                                  title: t.sortMyStarsShort,
-                                  content: (
-                                    <span className="text-[11px] font-bold text-[#00E054]">
-                                      ★
-                                    </span>
-                                  ),
-                                },
-                              ].map((plat) => {
-                                const active = listSort === plat.id;
-                                return (
-                                  <button
-                                    key={plat.id}
-                                    type="button"
-                                    title={plat.title}
-                                    onClick={() => setListSort(plat.id)}
-                                    className={`h-8 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
-                                      active
-                                        ? 'bg-[var(--bg-subcard)] border-[var(--accent-primary)] ring-1 ring-[var(--accent-primary)]'
-                                        : 'bg-[var(--bg-subcard)]/50 border-transparent hover:bg-[var(--bg-subcard)] opacity-70 hover:opacity-100'
-                                    }`}
-                                  >
-                                    {plat.content}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {/* Year Direction Picker when "За роком" is active */}
-                          {isYearSort && (
-                            <div className="grid grid-cols-2 gap-1.5 pt-0.5 animate-in fade-in duration-100">
-                              <button
-                                type="button"
-                                onClick={() => setListSort('year_desc')}
-                                className={`py-1.5 px-2.5 rounded-lg font-sans text-[11px] border transition-all cursor-pointer ${
-                                  listSort === 'year_desc'
-                                    ? 'bg-[var(--bg-subcard)] border-[var(--accent-primary)] font-bold'
-                                    : 'bg-[var(--bg-subcard)]/50 border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                                }`}
-                              >
-                                {t.sortYearNewest}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setListSort('year_asc')}
-                                className={`py-1.5 px-2.5 rounded-lg font-sans text-[11px] border transition-all cursor-pointer ${
-                                  listSort === 'year_asc'
-                                    ? 'bg-[var(--bg-subcard)] border-[var(--accent-primary)] font-bold'
-                                    : 'bg-[var(--bg-subcard)]/50 border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                                }`}
-                              >
-                                {t.sortYearOldest}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Clear List Button */}
-                  <button
-                    type="button"
-                    onClick={handleClearActiveList}
-                    className="h-9 px-3.5 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-rose-400 hover:text-rose-500 hover:border-rose-500/30 font-sans text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>{t.clearList}</span>
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSelectionMode(false);
+                          setSelectedForDeleteIds([]);
+                        }}
+                        aria-label="Cancel"
+                        className="w-9 h-9 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] flex items-center justify-center transition-colors cursor-pointer"
+                      >
+                        <PiXBold className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1603,7 +1626,7 @@ export default function App() {
                     }}
                     className="px-4 py-2 rounded-xl font-sans text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
+                    <PiArrowCounterClockwiseBold className="w-3.5 h-3.5" />
                     <span>{t.resetFilterBtn}</span>
                   </button>
                 </div>
@@ -1617,6 +1640,12 @@ export default function App() {
                       isInWishlist={isMovieInWishlist(movie.id)}
                       isInPool={isMovieInPool(movie.id)}
                       isWishlistView={activeListTab === 'wishlist'}
+                      isWatchedView={activeListTab === 'watched'}
+                      isSelectionMode={isSelectionMode}
+                      isSelectedForDelete={selectedForDeleteIds.includes(
+                        movie.id
+                      )}
+                      onToggleSelectForDelete={handleToggleSelectForDelete}
                       onToggleWishlist={handleToggleWishlist}
                       onMoveToRoulette={handleMoveFromWishlistToPool}
                       onSetMovieStatus={handleSetMovieStatus}
@@ -1653,9 +1682,11 @@ export default function App() {
         apiKey={tmdbConfig.customApiKey}
         initialQuery={searchQuery}
         isMovieInPool={isMovieInPool}
+        isMovieInWatched={isMovieInWatched}
         isMovieInWishlist={isMovieInWishlist}
         onClose={() => setIsAdvancedSearchOpen(false)}
         onAddToPool={handleAddMovieToPoolDirect}
+        onToggleWatched={handleToggleWatchedDirect}
         onToggleWishlist={handleToggleWishlist}
         onOpenMovieDetail={(movie) => handleOpenMovieDetail(movie, false)}
         onOpenSettings={() => setIsSettingsPopoverOpen(true)}
@@ -1704,6 +1735,11 @@ export default function App() {
         isInPool={
           selectedMovieModal ? isMovieInPool(selectedMovieModal.movie.id) : false
         }
+        isInWatched={
+          selectedMovieModal
+            ? isMovieInWatched(selectedMovieModal.movie.id)
+            : false
+        }
         isInWishlist={
           selectedMovieModal
             ? isMovieInWishlist(selectedMovieModal.movie.id)
@@ -1711,7 +1747,10 @@ export default function App() {
         }
         isMovieInPool={isMovieInPool}
         isMovieInWishlist={isMovieInWishlist}
-        onClose={() => setSelectedMovieModal(null)}
+        onClose={() => {
+          setSelectedMovieModal(null);
+          setMovieDetailHistory([]);
+        }}
         onTogglePool={(movie) => {
           if (!isMovieInPool(movie.id)) {
             handleAddMovieToPoolDirect(movie);
@@ -1721,10 +1760,26 @@ export default function App() {
         }}
         onAddMovieToPool={handleAddMovieToPoolDirect}
         onRestoreToRoulette={handleRestoreToRoulette}
+        onToggleWatched={handleToggleWatchedDirect}
         onToggleWishlist={handleToggleWishlist}
         onRateMovie={handleRateMovie}
         onChangePoster={handleChangeMoviePoster}
-        onSelectMovie={(movie) => handleOpenMovieDetail(movie, false)}
+        onSelectMovie={(nextMovie) => {
+          if (selectedMovieModal?.movie) {
+            setMovieDetailHistory((prev) => [
+              ...prev,
+              selectedMovieModal.movie,
+            ]);
+          }
+          handleOpenMovieDetail(nextMovie, false, true);
+        }}
+        canGoBack={movieDetailHistory.length > 0}
+        onGoBack={() => {
+          if (movieDetailHistory.length === 0) return;
+          const prevMovie = movieDetailHistory[movieDetailHistory.length - 1];
+          setMovieDetailHistory((prev) => prev.slice(0, -1));
+          handleOpenMovieDetail(prevMovie, false, true);
+        }}
       />
     </div>
   );

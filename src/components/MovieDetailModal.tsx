@@ -1,16 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  X,
-  Play,
-  Plus,
-  Check,
-  Film,
-  User,
-  Clapperboard,
-  Bookmark,
-  RotateCcw,
-  Pencil,
-} from 'lucide-react';
+  PiArrowCounterClockwiseBold,
+  PiArrowLeftBold,
+  PiBookmarkSimpleBold,
+  PiBookmarkSimpleFill,
+  PiCheckBold,
+  PiEyeBold,
+  PiEyeFill,
+  PiFilmSlateBold,
+  PiPencilSimpleBold,
+  PiPlayFill,
+  PiPlusBold,
+  PiUserBold,
+  PiVideoCameraBold,
+  PiXBold,
+} from 'react-icons/pi';
 import { AppLanguage, MovieItem, PersonCredit } from '../types/movie';
 import { MultiRatingBar } from './MultiRatingBar';
 import { StarRatingInput } from './StarRatingInput';
@@ -37,6 +41,7 @@ interface MovieDetailModalProps {
   apiKey?: string;
   autoPlayTrailer?: boolean;
   isInPool: boolean;
+  isInWatched?: boolean;
   isInWishlist?: boolean;
   isMovieInPool?: (movieId: string) => boolean;
   isMovieInWishlist?: (movieId: string) => boolean;
@@ -44,10 +49,13 @@ interface MovieDetailModalProps {
   onTogglePool: (movie: MovieItem) => void;
   onAddMovieToPool?: (movie: MovieItem) => void;
   onRestoreToRoulette?: (movie: MovieItem) => void;
+  onToggleWatched?: (movie: MovieItem) => void;
   onToggleWishlist?: (movie: MovieItem) => void;
   onRateMovie?: (movieId: string, rating: number | undefined) => void;
   onChangePoster?: (movieId: string, newPosterUrl: string) => void;
   onSelectMovie?: (movie: MovieItem) => void;
+  canGoBack?: boolean;
+  onGoBack?: () => void;
 }
 
 export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
@@ -56,6 +64,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
   apiKey,
   autoPlayTrailer = false,
   isInPool,
+  isInWatched = false,
   isInWishlist = false,
   isMovieInPool,
   isMovieInWishlist,
@@ -63,10 +72,13 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
   onTogglePool,
   onAddMovieToPool,
   onRestoreToRoulette,
+  onToggleWatched,
   onToggleWishlist,
   onRateMovie,
   onChangePoster,
   onSelectMovie,
+  canGoBack = false,
+  onGoBack,
 }) => {
   const scrollBodyRef = useRef<HTMLDivElement | null>(null);
   const filmographyRef = useRef<HTMLDivElement | null>(null);
@@ -303,7 +315,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                 />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900">
-                  <Film className="w-12 h-12 mb-2 text-white/70" />
+                  <PiFilmSlateBold className="w-12 h-12 mb-2 text-white/70" />
                   <span className="font-display text-lg text-white">
                     {displayTitle}
                   </span>
@@ -320,7 +332,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                     onClick={() => setShowTrailer(true)}
                     className="px-6 py-3.5 rounded-2xl bg-white text-black font-display font-bold tracking-wide text-sm sm:text-base flex items-center gap-2.5 shadow-xl transition-transform hover:scale-105 cursor-pointer"
                   >
-                    <Play className="w-5 h-5 fill-current" />
+                    <PiPlayFill className="w-5 h-5" />
                     <span>{t.watchTrailer}</span>
                   </button>
                 </div>
@@ -362,9 +374,31 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                           : 'bg-black/65 text-white border-white/20 hover:bg-white hover:text-black'
                       }`}
                     >
-                      <Pencil className="w-4 h-4" />
+                      <PiPencilSimpleBold className="w-4 h-4" />
                       <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150">
                         {t.changePosterBtn}
+                      </span>
+                    </button>
+                  )}
+
+                  {onToggleWatched && (
+                    <button
+                      type="button"
+                      onClick={() => onToggleWatched(movie)}
+                      aria-label={t.watchedStatusLabel}
+                      className={`group/btn relative p-3 rounded-xl border transition-colors cursor-pointer ${
+                        isInWatched
+                          ? 'bg-white text-black border-white'
+                          : 'bg-black/65 text-white border-white/20 hover:bg-white hover:text-black'
+                      }`}
+                    >
+                      {isInWatched ? (
+                        <PiEyeFill className="w-4 h-4" />
+                      ) : (
+                        <PiEyeBold className="w-4 h-4" />
+                      )}
+                      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150">
+                        {t.watchedStatusLabel}
                       </span>
                     </button>
                   )}
@@ -384,11 +418,11 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                           : 'bg-black/65 text-white border-white/20 hover:bg-white hover:text-black'
                       }`}
                     >
-                      <Bookmark
-                        className={`w-4 h-4 ${
-                          isInWishlist ? 'fill-current' : ''
-                        }`}
-                      />
+                      {isInWishlist ? (
+                        <PiBookmarkSimpleFill className="w-4 h-4" />
+                      ) : (
+                        <PiBookmarkSimpleBold className="w-4 h-4" />
+                      )}
                       <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150">
                         {isInWishlist
                           ? t.removeFromWishlistTitle
@@ -403,7 +437,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                       onClick={() => onRestoreToRoulette(movie)}
                       className="px-4 py-3 rounded-xl bg-white text-black hover:opacity-90 font-display text-xs sm:text-sm font-bold tracking-wide uppercase flex items-center gap-2 transition-all cursor-pointer shadow-lg"
                     >
-                      <RotateCcw className="w-4 h-4" />
+                      <PiArrowCounterClockwiseBold className="w-4 h-4" />
                       <span>{t.includeInRouletteBtn}</span>
                     </button>
                   ) : (
@@ -418,12 +452,12 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                     >
                       {isInPool ? (
                         <>
-                          <Check className="w-4 h-4" />
+                          <PiCheckBold className="w-4 h-4" />
                           <span>{t.inRoulettePool}</span>
                         </>
                       ) : (
                         <>
-                          <Plus className="w-4 h-4" />
+                          <PiPlusBold className="w-4 h-4" />
                           <span>{t.addToRoulettePool}</span>
                         </>
                       )}
@@ -443,23 +477,38 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
             </>
           )}
 
-          {/* Close Button */}
+          {/* Close Button (Top-Right) */}
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
             className="absolute top-4 right-4 z-20 p-2.5 rounded-xl bg-black/65 hover:bg-black text-white border border-white/15 transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <PiXBold className="w-5 h-5" />
           </button>
 
-          {showTrailer && (
+          {/* Back Arrow Icon Button (Top-Left) — Shown when navigating across movies, viewing a person's filmography, or watching trailer */}
+          {(showTrailer || selectedPerson !== null || canGoBack) && (
             <button
               type="button"
-              onClick={() => setShowTrailer(false)}
-              className="absolute top-4 left-4 z-20 px-3.5 py-2 rounded-xl bg-black/65 hover:bg-black text-xs sm:text-sm font-semibold text-white border border-white/15 transition-colors cursor-pointer"
+              onClick={() => {
+                if (showTrailer) {
+                  setShowTrailer(false);
+                } else if (selectedPerson !== null) {
+                  setSelectedPerson(null);
+                  setPersonMovies([]);
+                  scrollBodyRef.current?.scrollTo({
+                    top: 0,
+                    behavior: 'smooth',
+                  });
+                } else if (canGoBack && onGoBack) {
+                  onGoBack();
+                }
+              }}
+              aria-label={t.backToDetails}
+              className="absolute top-4 left-4 z-20 p-2.5 rounded-xl bg-black/65 hover:bg-black text-white border border-white/15 transition-colors cursor-pointer"
             >
-              {t.backToDetails}
+              <PiArrowLeftBold className="w-5 h-5" />
             </button>
           )}
         </div>
@@ -474,7 +523,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
             <div className="p-5 rounded-2xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] space-y-4 animate-in fade-in duration-150">
               <div className="flex items-center justify-between">
                 <span className="font-display text-base font-bold uppercase tracking-wide flex items-center gap-2">
-                  <Pencil className="w-4 h-4" />
+                  <PiPencilSimpleBold className="w-4 h-4" />
                   <span>{t.posterPickerTitle}</span>
                 </span>
                 <button
@@ -483,7 +532,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                   aria-label="Close"
                   className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
                 >
-                  <X className="w-4 h-4" />
+                  <PiXBold className="w-4 h-4" />
                 </button>
               </div>
 
@@ -565,7 +614,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                         )}
                         {isCurrent && (
                           <span className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-emerald-500 text-black flex items-center justify-center shadow-md">
-                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <PiCheckBold className="w-3.5 h-3.5" />
                           </span>
                         )}
                       </button>
@@ -597,7 +646,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                   onClick={() => onRestoreToRoulette(movie)}
                   className="px-4 py-2.5 rounded-xl bg-[var(--bg-card)] hover:bg-white text-[var(--text-main)] hover:text-black border border-[var(--border-subtle)] font-display text-xs font-bold tracking-wide uppercase flex items-center gap-2 transition-all cursor-pointer"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
+                  <PiArrowCounterClockwiseBold className="w-3.5 h-3.5" />
                   <span>{t.includeInRouletteBtn}</span>
                 </button>
               )}
@@ -663,9 +712,9 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-zinc-800 to-zinc-950 p-3">
                           {person.isDirector ? (
-                            <Clapperboard className="w-9 h-9 text-zinc-400 mb-2" />
+                            <PiVideoCameraBold className="w-9 h-9 text-zinc-400 mb-2" />
                           ) : (
-                            <User className="w-9 h-9 text-zinc-400 mb-2" />
+                            <PiUserBold className="w-9 h-9 text-zinc-400 mb-2" />
                           )}
                         </div>
                       )}
@@ -708,7 +757,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                       aria-label="Close"
                       className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
                     >
-                      <X className="w-4 h-4" />
+                      <PiXBold className="w-4 h-4" />
                     </button>
                   </div>
 
@@ -745,7 +794,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
-                                  <Film className="w-6 h-6 text-zinc-500" />
+                                  <PiFilmSlateBold className="w-6 h-6 text-zinc-500" />
                                 </div>
                               )}
                               <div
@@ -816,7 +865,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                           />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center">
-                            <Film className="w-6 h-6 text-zinc-500 mb-1.5" />
+                            <PiFilmSlateBold className="w-6 h-6 text-zinc-500 mb-1.5" />
                             <span className="font-display text-xs text-white uppercase">
                               {smTitle}
                             </span>
@@ -826,67 +875,71 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                         {/* Top-Right Hover Quick Actions: Add to Movies + Add to Wishlist */}
                         <div className="absolute top-2 right-2 flex items-center gap-1 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto transition-opacity duration-200">
                           {onAddMovieToPool && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (!smInPool) {
-                                  onAddMovieToPool(sm);
+                            <div className="group/btn">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!smInPool) {
+                                    onAddMovieToPool(sm);
+                                  }
+                                }}
+                                aria-label={
+                                  smInPool
+                                    ? t.addedToPoolTooltip
+                                    : t.moveToRouletteTitle
                                 }
-                              }}
-                              aria-label={
-                                smInPool
-                                  ? t.addedToPoolTooltip
-                                  : t.moveToRouletteTitle
-                              }
-                              className={`group/btn w-7.5 h-7.5 rounded-lg backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
-                                smInPool
-                                  ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/25'
-                                  : 'bg-black/75 hover:bg-white text-white hover:text-black border border-white/10'
-                              }`}
-                            >
-                              {smInPool ? (
-                                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                              ) : (
-                                <Plus className="w-3.5 h-3.5" />
-                              )}
-                              <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2 py-0.5 rounded-md bg-[#141419] text-white border border-white/15 text-[10px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150">
+                                className={`w-7.5 h-7.5 rounded-lg backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
+                                  smInPool
+                                    ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/25'
+                                    : 'bg-black/75 hover:bg-white text-white hover:text-black border border-white/10'
+                                }`}
+                              >
+                                {smInPool ? (
+                                  <PiCheckBold className="w-3.5 h-3.5" />
+                                ) : (
+                                  <PiPlusBold className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                              <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2 py-0.5 rounded-md bg-[#141419] text-white border border-white/15 text-[10px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
                                 {smInPool
                                   ? t.addedToPoolTooltip
                                   : t.moveToRouletteTitle}
                               </span>
-                            </button>
+                            </div>
                           )}
 
                           {onToggleWishlist && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onToggleWishlist(sm);
-                              }}
-                              aria-label={
-                                smInWishlist
-                                  ? t.removeFromWishlistTitle
-                                  : t.addToWishlistTitle
-                              }
-                              className={`group/btn w-7.5 h-7.5 rounded-lg backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
-                                smInWishlist
-                                  ? 'bg-white text-black shadow-md'
-                                  : 'bg-black/75 hover:bg-white text-white/90 hover:text-black border border-white/10'
-                              }`}
-                            >
-                              <Bookmark
-                                className={`w-3.5 h-3.5 ${
-                                  smInWishlist ? 'fill-current' : ''
+                            <div className="group/btn">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onToggleWishlist(sm);
+                                }}
+                                aria-label={
+                                  smInWishlist
+                                    ? t.removeFromWishlistTitle
+                                    : t.addToWishlistTitle
+                                }
+                                className={`w-7.5 h-7.5 rounded-lg backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
+                                  smInWishlist
+                                    ? 'bg-white text-black shadow-md'
+                                    : 'bg-black/75 hover:bg-white text-white/90 hover:text-black border border-white/10'
                                 }`}
-                              />
-                              <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2 py-0.5 rounded-md bg-[#141419] text-white border border-white/15 text-[10px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150">
+                              >
+                                {smInWishlist ? (
+                                  <PiBookmarkSimpleFill className="w-3.5 h-3.5" />
+                                ) : (
+                                  <PiBookmarkSimpleBold className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                              <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2 py-0.5 rounded-md bg-[#141419] text-white border border-white/15 text-[10px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
                                 {smInWishlist
                                   ? t.removeFromWishlistTitle
                                   : t.addToWishlistTitle}
                               </span>
-                            </button>
+                            </div>
                           )}
                         </div>
 
