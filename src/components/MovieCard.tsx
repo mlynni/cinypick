@@ -31,7 +31,7 @@ interface MovieCardProps {
   onOpenDetail: (movie: MovieItem, autoPlayTrailer?: boolean) => void;
 }
 
-export const MovieCard: React.FC<MovieCardProps> = ({
+export const MovieCard: React.FC<MovieCardProps> = React.memo(({
   movie,
   language,
   isInWishlist,
@@ -59,6 +59,9 @@ export const MovieCard: React.FC<MovieCardProps> = ({
   const weight = movie.rouletteWeight || 1;
   const showWeightBadge =
     !isWishlistView && !isWatchedView && !isChosen && !isWatched && weight > 1;
+  const posterThumbUrl = movie.posterPath
+    ? movie.posterPath.replace('/t/p/w780/', '/t/p/w500/')
+    : undefined;
 
   return (
     <article
@@ -69,7 +72,7 @@ export const MovieCard: React.FC<MovieCardProps> = ({
           onOpenDetail(movie, false);
         }
       }}
-      className={`group relative aspect-[2/3] w-full rounded-[22px] overflow-hidden bg-[var(--bg-card)] border cursor-pointer select-none shadow-sm transition-all duration-200 animate-movie-fade-in ${
+      className={`group relative aspect-[2/3] w-full rounded-[22px] overflow-hidden bg-[var(--bg-card)] border cursor-pointer select-none shadow-sm transition-colors duration-200 [content-visibility:auto] [contain-intrinsic-size:240px_360px] ${
         isSelectionMode
           ? isSelectedForDelete
             ? 'border-rose-500 ring-2 ring-rose-500 scale-[0.98]'
@@ -78,18 +81,19 @@ export const MovieCard: React.FC<MovieCardProps> = ({
       }`}
     >
       {/* Full-bleed 2:3 Poster — turns Black & White when marked as Watched or Chosen */}
-      {!imgError && movie.posterPath ? (
+      {!imgError && posterThumbUrl ? (
         <img
-          src={movie.posterPath}
+          src={posterThumbUrl}
           alt={displayTitle}
           referrerPolicy="no-referrer"
           onError={() => setImgError(true)}
-          className={`w-full h-full object-cover group-hover:scale-[1.03] transition-all duration-300 ${
+          className={`w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300 ${
             isBwPoster
               ? 'grayscale contrast-115 brightness-90 group-hover:brightness-100'
               : ''
           }`}
           loading="lazy"
+          decoding="async"
         />
       ) : (
         <div
@@ -329,4 +333,4 @@ export const MovieCard: React.FC<MovieCardProps> = ({
       )}
     </article>
   );
-};
+});

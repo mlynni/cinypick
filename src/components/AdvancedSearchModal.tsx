@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   PiArrowCounterClockwiseBold,
   PiBookmarkSimpleBold,
@@ -114,6 +114,181 @@ const DECADE_PRESETS: Array<{
   },
 ];
 
+function sortMovieBatch(items: MovieItem[], mode: AdvSortMode): MovieItem[] {
+  if (mode === 'popularity') return items;
+  return [...items].sort((a, b) => {
+    if (mode === 'imdb') {
+      return b.ratings.imdb.score - a.ratings.imdb.score;
+    }
+    if (mode === 'rt') {
+      return (
+        b.ratings.rottenTomatoes.tomatometer -
+        a.ratings.rottenTomatoes.tomatometer
+      );
+    }
+    if (mode === 'lb') {
+      return b.ratings.letterboxd.score - a.ratings.letterboxd.score;
+    }
+    if (mode === 'tmdb') {
+      return b.ratings.tmdb.score - a.ratings.tmdb.score;
+    }
+    if (mode === 'year_desc') {
+      return b.releaseYear - a.releaseYear;
+    }
+    if (mode === 'year_asc') {
+      return a.releaseYear - b.releaseYear;
+    }
+    return 0;
+  });
+}
+
+function getGridPosterThumbUrl(posterPath?: string): string | undefined {
+  if (!posterPath) return undefined;
+  return posterPath.replace('/t/p/w780/', '/t/p/w342/');
+}
+
+interface AdvancedSearchPosterCardProps {
+  movie: MovieItem;
+  language: AppLanguage;
+  inPool: boolean;
+  inWatched: boolean;
+  inWishlist: boolean;
+  onOpenMovieDetail: (movie: MovieItem) => void;
+  onAddToPool: (movie: MovieItem) => void;
+  onToggleWatched?: (movie: MovieItem) => void;
+  onToggleWishlist: (movie: MovieItem) => void;
+}
+
+const AdvancedSearchPosterCard = React.memo<AdvancedSearchPosterCardProps>(
+  ({
+    movie,
+    language,
+    inPool,
+    inWatched,
+    inWishlist,
+    onOpenMovieDetail,
+    onAddToPool,
+    onToggleWatched,
+    onToggleWishlist,
+  }) => {
+    const t = UI_TEXT[language];
+    const primaryTitle = getMovieTitle(movie, language);
+    const thumbUrl = getGridPosterThumbUrl(movie.posterPath);
+
+    return (
+      <article
+        onClick={() => onOpenMovieDetail(movie)}
+        className="group relative aspect-[2/3] w-full rounded-[22px] overflow-hidden bg-[#121216] border border-[var(--border-subtle)] hover:border-white/25 transition-colors cursor-pointer select-none [content-visibility:auto] [contain-intrinsic-size:200px_300px]"
+      >
+        {thumbUrl ? (
+          <img
+            src={thumbUrl}
+            alt={primaryTitle}
+            referrerPolicy="no-referrer"
+            loading="lazy"
+            decoding="async"
+            className={`w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300 ${
+              inWatched ? 'grayscale contrast-110 opacity-80' : ''
+            }`}
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
+            <PiFilmSlateBold className="w-9 h-9 text-zinc-500 mb-2" />
+            <span className="font-display text-sm text-white uppercase">
+              {primaryTitle}
+            </span>
+          </div>
+        )}
+
+        {/* Top Vignette on Hover */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/65 via-black/25 to-transparent opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity duration-150" />
+
+        {/* Top-Right Hover Action Icons (Add to Roulette + Watched + Wishlist) */}
+        <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto transition-opacity duration-150">
+          <div className="group/btn">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!inPool) onAddToPool(movie);
+              }}
+              aria-label={inPool ? t.addedToPoolTooltip : t.moveToRouletteTitle}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+                inPool
+                  ? 'bg-emerald-500 text-black shadow-md'
+                  : 'bg-black/85 hover:bg-white text-white hover:text-black border border-white/15'
+              }`}
+            >
+              {inPool ? (
+                <PiCheckBold className="w-4 h-4" />
+              ) : (
+                <PiPlusBold className="w-4 h-4" />
+              )}
+            </button>
+            <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
+              {inPool ? t.addedToPoolTooltip : t.moveToRouletteTitle}
+            </span>
+          </div>
+
+          {onToggleWatched && (
+            <div className="group/btn">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleWatched(movie);
+                }}
+                aria-label={t.watchedStatusLabel}
+                className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+                  inWatched
+                    ? 'bg-white text-black shadow-md'
+                    : 'bg-black/85 hover:bg-white text-white/90 hover:text-black border border-white/15'
+                }`}
+              >
+                {inWatched ? (
+                  <PiEyeFill className="w-4 h-4" />
+                ) : (
+                  <PiEyeBold className="w-4 h-4" />
+                )}
+              </button>
+              <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
+                {t.watchedStatusLabel}
+              </span>
+            </div>
+          )}
+
+          <div className="group/btn">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleWishlist(movie);
+              }}
+              aria-label={
+                inWishlist ? t.removeFromWishlistTitle : t.addToWishlistTitle
+              }
+              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+                inWishlist
+                  ? 'bg-white text-black shadow-md'
+                  : 'bg-black/85 hover:bg-white text-white/90 hover:text-black border border-white/15'
+              }`}
+            >
+              {inWishlist ? (
+                <PiBookmarkSimpleFill className="w-4 h-4" />
+              ) : (
+                <PiBookmarkSimpleBold className="w-4 h-4" />
+              )}
+            </button>
+            <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
+              {inWishlist ? t.removeFromWishlistTitle : t.addToWishlistTitle}
+            </span>
+          </div>
+        </div>
+      </article>
+    );
+  }
+);
+
 export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
   isOpen,
   language,
@@ -199,6 +374,36 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
     return 'vote_average.desc';
   };
 
+  // Stable callback refs so React.memo poster cards never re-render needlessly
+  const callbacksRef = useRef({
+    onOpenMovieDetail,
+    onAddToPool,
+    onToggleWatched,
+    onToggleWishlist,
+  });
+  callbacksRef.current = {
+    onOpenMovieDetail,
+    onAddToPool,
+    onToggleWatched,
+    onToggleWishlist,
+  };
+
+  const stableOnOpenMovieDetail = useCallback((m: MovieItem) => {
+    callbacksRef.current.onOpenMovieDetail(m);
+  }, []);
+
+  const stableOnAddToPool = useCallback((m: MovieItem) => {
+    callbacksRef.current.onAddToPool(m);
+  }, []);
+
+  const stableOnToggleWatched = useCallback((m: MovieItem) => {
+    callbacksRef.current.onToggleWatched?.(m);
+  }, []);
+
+  const stableOnToggleWishlist = useCallback((m: MovieItem) => {
+    callbacksRef.current.onToggleWishlist(m);
+  }, []);
+
   // Live auto-fetch whenever modal opens or filters change
   useEffect(() => {
     if (!isOpen) return;
@@ -220,7 +425,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
       });
 
       if (!isCancelled) {
-        setResults(res.results);
+        setResults(sortMovieBatch(res.results, sortMode));
         setHasApiKey(res.hasApiKey);
         setHasMore(res.hasMore);
         setLoading(false);
@@ -265,7 +470,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
     setResults((prev) => {
       const existingIds = new Set(prev.map((m) => m.id));
       const uniqueNew = res.results.filter((m) => !existingIds.has(m.id));
-      return [...prev, ...uniqueNew];
+      return [...prev, ...sortMovieBatch(uniqueNew, sortMode)];
     });
     setPage(nextPage);
     setHasMore(res.hasMore);
@@ -326,32 +531,6 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
     setYearToText(String(clamped));
   };
 
-  // Client-side sort refinement
-  const sortedResults = [...results].sort((a, b) => {
-    if (sortMode === 'imdb') {
-      return b.ratings.imdb.score - a.ratings.imdb.score;
-    }
-    if (sortMode === 'rt') {
-      return (
-        b.ratings.rottenTomatoes.tomatometer -
-        a.ratings.rottenTomatoes.tomatometer
-      );
-    }
-    if (sortMode === 'lb') {
-      return b.ratings.letterboxd.score - a.ratings.letterboxd.score;
-    }
-    if (sortMode === 'tmdb') {
-      return b.ratings.tmdb.score - a.ratings.tmdb.score;
-    }
-    if (sortMode === 'year_desc') {
-      return b.releaseYear - a.releaseYear;
-    }
-    if (sortMode === 'year_asc') {
-      return a.releaseYear - b.releaseYear;
-    }
-    return 0;
-  });
-
   const ratingOptions = [
     { label: t.advAnyRating, value: 0 },
     { label: '6.0+', value: 6.0 },
@@ -409,7 +588,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 overflow-y-auto"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -981,7 +1160,7 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
             <div className="h-full min-h-[360px] flex items-center justify-center font-sans text-sm text-[var(--text-muted)]">
               {t.searchingTmdb}
             </div>
-          ) : sortedResults.length === 0 ? (
+          ) : results.length === 0 ? (
             <div className="h-full min-h-[360px] rounded-2xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)] p-10 flex flex-col items-center justify-center text-center space-y-3">
               <p className="font-sans text-sm text-[var(--text-muted)]">
                 {t.advNoResults}
@@ -1004,134 +1183,24 @@ export const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
           ) : (
             <div className="space-y-6">
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-5">
-                {sortedResults.map((movie) => {
-                  const primaryTitle = getMovieTitle(movie, language);
-                  const inPool = isMovieInPool(movie.id);
-                  const inWatched = isMovieInWatched
-                    ? isMovieInWatched(movie.id)
-                    : false;
-                  const inWishlist = isMovieInWishlist(movie.id);
-
-                  return (
-                    <article
-                      key={movie.id}
-                      onClick={() => onOpenMovieDetail(movie)}
-                      className="group relative aspect-[2/3] w-full rounded-[22px] overflow-hidden bg-[#121216] border border-[var(--border-subtle)] hover:border-white/25 transition-all cursor-pointer select-none animate-movie-fade-in"
-                    >
-                      {movie.posterPath ? (
-                        <img
-                          src={movie.posterPath}
-                          alt={primaryTitle}
-                          referrerPolicy="no-referrer"
-                          className={`w-full h-full object-cover group-hover:scale-[1.03] transition-all duration-300 ${
-                            inWatched ? 'grayscale contrast-110 opacity-80' : ''
-                          }`}
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
-                          <PiFilmSlateBold className="w-9 h-9 text-zinc-500 mb-2" />
-                          <span className="font-display text-sm text-white uppercase">
-                            {primaryTitle}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Top Vignette on Hover */}
-                      <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/65 via-black/25 to-transparent opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity duration-200" />
-
-                      {/* Top-Right Hover Action Icons (Add to Library + Watched + Wishlist) */}
-                      <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-20 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto transition-opacity duration-200">
-                        <div className="group/btn">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (!inPool) onAddToPool(movie);
-                            }}
-                            aria-label={
-                              inPool ? t.addedToPoolTooltip : t.moveToRouletteTitle
-                            }
-                            className={`w-8 h-8 rounded-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
-                              inPool
-                                ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/25'
-                                : 'bg-black/75 hover:bg-white text-white hover:text-black border border-white/10'
-                            }`}
-                          >
-                            {inPool ? (
-                              <PiCheckBold className="w-4 h-4" />
-                            ) : (
-                              <PiPlusBold className="w-4 h-4" />
-                            )}
-                          </button>
-                          <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
-                            {inPool
-                              ? t.addedToPoolTooltip
-                              : t.moveToRouletteTitle}
-                          </span>
-                        </div>
-
-                        {onToggleWatched && (
-                          <div className="group/btn">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onToggleWatched(movie);
-                              }}
-                              aria-label={t.watchedStatusLabel}
-                              className={`w-8 h-8 rounded-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
-                                inWatched
-                                  ? 'bg-white text-black shadow-md'
-                                  : 'bg-black/75 hover:bg-white text-white/90 hover:text-black border border-white/10'
-                              }`}
-                            >
-                              {inWatched ? (
-                                <PiEyeFill className="w-4 h-4" />
-                              ) : (
-                                <PiEyeBold className="w-4 h-4" />
-                              )}
-                            </button>
-                            <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
-                              {t.watchedStatusLabel}
-                            </span>
-                          </div>
-                        )}
-
-                        <div className="group/btn">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onToggleWishlist(movie);
-                            }}
-                            aria-label={
-                              inWishlist
-                                ? t.removeFromWishlistTitle
-                                : t.addToWishlistTitle
-                            }
-                            className={`w-8 h-8 rounded-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
-                              inWishlist
-                                ? 'bg-white text-black shadow-md'
-                                : 'bg-black/75 hover:bg-white text-white/90 hover:text-black border border-white/10'
-                            }`}
-                          >
-                            {inWishlist ? (
-                              <PiBookmarkSimpleFill className="w-4 h-4" />
-                            ) : (
-                              <PiBookmarkSimpleBold className="w-4 h-4" />
-                            )}
-                          </button>
-                          <span className="pointer-events-none absolute top-full right-0 mt-1.5 px-2.5 py-1 rounded-lg bg-[#18181F] text-white border border-white/15 text-[11px] font-sans font-semibold whitespace-nowrap shadow-xl opacity-0 scale-95 -translate-y-1 group-hover/btn:opacity-100 group-hover/btn:scale-100 group-hover/btn:translate-y-0 transition-all duration-150 z-30">
-                            {inWishlist
-                              ? t.removeFromWishlistTitle
-                              : t.addToWishlistTitle}
-                          </span>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
+                {results.map((movie) => (
+                  <AdvancedSearchPosterCard
+                    key={movie.id}
+                    movie={movie}
+                    language={language}
+                    inPool={isMovieInPool(movie.id)}
+                    inWatched={
+                      isMovieInWatched ? isMovieInWatched(movie.id) : false
+                    }
+                    inWishlist={isMovieInWishlist(movie.id)}
+                    onOpenMovieDetail={stableOnOpenMovieDetail}
+                    onAddToPool={stableOnAddToPool}
+                    onToggleWatched={
+                      onToggleWatched ? stableOnToggleWatched : undefined
+                    }
+                    onToggleWishlist={stableOnToggleWishlist}
+                  />
+                ))}
               </div>
 
               {/* Load More Pagination Button */}
