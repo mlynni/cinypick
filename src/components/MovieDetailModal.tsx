@@ -102,6 +102,9 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
   const [personMovies, setPersonMovies] = useState<MovieItem[]>([]);
   const [loadingPersonMovies, setLoadingPersonMovies] =
     useState<boolean>(false);
+  const [personSortMode, setPersonSortMode] = useState<
+    'popularity' | 'rating' | 'year_desc' | 'year_asc'
+  >('popularity');
 
   // Stack to restore a person's filmography window when navigating Back from a movie opened inside that person's view
   const personReturnStackRef = useRef<
@@ -140,6 +143,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
     } else {
       setSelectedPerson(null);
       setPersonMovies([]);
+      setPersonSortMode('popularity');
     }
 
     if (scrollBodyRef.current) {
@@ -278,6 +282,7 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
     isDirector?: boolean;
   }) => {
     setSelectedPerson(person);
+    setPersonSortMode('popularity');
     setPersonMovies([]);
     setLoadingPersonMovies(true);
     if (scrollBodyRef.current) {
@@ -292,6 +297,29 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
     setPersonMovies(credits);
     setLoadingPersonMovies(false);
   };
+
+  const sortedPersonMovies =
+    personSortMode === 'popularity'
+      ? personMovies
+      : [...personMovies].sort((a, b) => {
+          if (personSortMode === 'rating') {
+            return (
+              calculateCompositeScore(b.ratings) -
+                calculateCompositeScore(a.ratings) ||
+              b.ratings.imdb.score - a.ratings.imdb.score
+            );
+          }
+          if (personSortMode === 'year_desc') {
+            return (b.releaseYear || 0) - (a.releaseYear || 0);
+          }
+          if (personSortMode === 'year_asc') {
+            return (a.releaseYear || 9999) - (b.releaseYear || 9999);
+          }
+          return 0;
+        });
+
+  const isPersonYearSort =
+    personSortMode === 'year_desc' || personSortMode === 'year_asc';
 
   return (
     <div
@@ -309,13 +337,14 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
         {selectedPerson ? (
           <>
             {/* Dedicated Full-Window Person Filmography Header */}
-            <div className="px-5 sm:px-7 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-4 shrink-0 bg-[var(--bg-card)]">
+            <div className="px-5 sm:px-7 py-4 border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3 sm:gap-4 shrink-0 bg-[var(--bg-card)]">
               <div className="flex items-center gap-3.5 min-w-0">
                 <button
                   type="button"
                   onClick={() => {
                     setSelectedPerson(null);
                     setPersonMovies([]);
+                    setPersonSortMode('popularity');
                   }}
                   aria-label={t.backToDetails}
                   className="p-2.5 rounded-xl bg-[var(--bg-subcard)] hover:opacity-85 text-[var(--text-main)] border border-[var(--border-subtle)] transition-opacity cursor-pointer shrink-0"
@@ -345,9 +374,15 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
 
                 <div className="min-w-0">
                   <div className="text-[11px] font-sans font-bold uppercase tracking-wider text-[var(--text-muted)] truncate">
-                    {selectedPerson.roleLabel}
+                    {selectedPerson.isDirector
+                      ? t.directorLabel
+                      : language === 'en-US'
+                      ? 'Actor'
+                      : 'Актор'}
                     {!loadingPersonMovies && personMovies.length > 0
-                      ? ` · ${personMovies.length}`
+                      ? ` · ${personMovies.length} ${
+                          language === 'en-US' ? 'movies' : 'фільмів'
+                        }`
                       : ''}
                   </div>
                   <h2 className="font-display text-2xl sm:text-3xl font-bold uppercase tracking-tight truncate">
@@ -356,14 +391,86 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close"
-                className="p-2.5 rounded-xl bg-[var(--bg-subcard)] hover:opacity-85 text-[var(--text-main)] border border-[var(--border-subtle)] transition-opacity cursor-pointer shrink-0"
-              >
-                <PiXBold className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2.5 shrink-0 ml-auto">
+                {/* 3-Tab Sort Pill Bar: Популярність / Рейтинг / Рік ↓↑ */}
+                <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--bg-subcard)] border border-[var(--border-subtle)]">
+                  <button
+                    type="button"
+                    onClick={() => setPersonSortMode('popularity')}
+                    style={
+                      personSortMode === 'popularity'
+                        ? {
+                            backgroundColor: 'var(--accent-primary)',
+                            color: 'var(--accent-text)',
+                          }
+                        : undefined
+                    }
+                    className={`py-1.5 px-2.5 sm:px-3 rounded-lg font-sans text-xs whitespace-nowrap transition-colors cursor-pointer ${
+                      personSortMode === 'popularity'
+                        ? 'font-bold'
+                        : 'font-medium text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    {t.advSortPopular}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPersonSortMode('rating')}
+                    style={
+                      personSortMode === 'rating'
+                        ? {
+                            backgroundColor: 'var(--accent-primary)',
+                            color: 'var(--accent-text)',
+                          }
+                        : undefined
+                    }
+                    className={`py-1.5 px-2.5 sm:px-3 rounded-lg font-sans text-xs whitespace-nowrap transition-colors cursor-pointer ${
+                      personSortMode === 'rating'
+                        ? 'font-bold'
+                        : 'font-medium text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    {t.sortGroupRating}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPersonSortMode((prev) =>
+                        prev === 'year_desc' ? 'year_asc' : 'year_desc'
+                      )
+                    }
+                    style={
+                      isPersonYearSort
+                        ? {
+                            backgroundColor: 'var(--accent-primary)',
+                            color: 'var(--accent-text)',
+                          }
+                        : undefined
+                    }
+                    className={`py-1.5 px-2.5 sm:px-3 rounded-lg font-sans text-xs whitespace-nowrap flex items-center gap-1 transition-colors cursor-pointer ${
+                      isPersonYearSort
+                        ? 'font-bold'
+                        : 'font-medium text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    <span>{t.sortGroupYear}</span>
+                    {isPersonYearSort && (
+                      <span>{personSortMode === 'year_asc' ? '↑' : '↓'}</span>
+                    )}
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close"
+                  className="p-2.5 rounded-xl bg-[var(--bg-subcard)] hover:opacity-85 text-[var(--text-main)] border border-[var(--border-subtle)] transition-opacity cursor-pointer shrink-0"
+                >
+                  <PiXBold className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Full-Window Scrollable Grid of All Person's Movies */}
@@ -375,13 +482,13 @@ export const MovieDetailModal: React.FC<MovieDetailModalProps> = ({
                 <div className="py-20 text-center text-sm text-[var(--text-muted)]">
                   {t.loadingFilmography}
                 </div>
-              ) : personMovies.length === 0 ? (
+              ) : sortedPersonMovies.length === 0 ? (
                 <div className="py-20 text-center text-sm text-[var(--text-muted)]">
                   {t.noPersonMovies}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {personMovies.map((pm) => {
+                  {sortedPersonMovies.map((pm) => {
                     const pmTitle = getMovieTitle(pm, language);
                     const pmInPool = isMovieInPool
                       ? isMovieInPool(pm.id)
