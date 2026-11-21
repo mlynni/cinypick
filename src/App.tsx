@@ -1314,19 +1314,22 @@ export default function App() {
                       const itemTitle = getMovieTitle(item, lang);
                       const altTitle = getMovieAltTitle(item, lang);
                       return (
-                        <button
+                        <div
                           key={item.id}
-                          type="button"
-                          disabled={alreadyInActive}
-                          onClick={() => handleAddMovieToActiveList(item)}
-                          className="w-full p-3.5 flex items-center justify-between gap-3.5 text-left hover:bg-black/10 dark:hover:bg-white/5 transition-colors disabled:opacity-50 cursor-pointer"
+                          onClick={() => handleOpenMovieDetail(item, false)}
+                          className="w-full p-3.5 flex items-center justify-between gap-3.5 text-left hover:bg-black/10 dark:hover:bg-white/5 transition-colors cursor-pointer"
                         >
                           <div className="flex items-center gap-3.5 min-w-0">
                             {item.posterPath ? (
                               <img
-                                src={item.posterPath}
+                                src={item.posterPath.replace(
+                                  '/t/p/w780/',
+                                  '/t/p/w185/'
+                                )}
                                 alt={itemTitle}
                                 referrerPolicy="no-referrer"
+                                loading="lazy"
+                                decoding="async"
                                 className="w-11 h-16 object-cover rounded-lg shrink-0"
                               />
                             ) : (
@@ -1349,7 +1352,13 @@ export default function App() {
                             </div>
                           </div>
 
-                          <span
+                          <button
+                            type="button"
+                            disabled={alreadyInActive}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAddMovieToActiveList(item);
+                            }}
                             style={
                               alreadyInActive
                                 ? undefined
@@ -1358,10 +1367,10 @@ export default function App() {
                                     color: 'var(--accent-text)',
                                   }
                             }
-                            className={`px-3 py-2 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1 ${
+                            className={`px-3 py-2 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1 transition-opacity ${
                               alreadyInActive
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : ''
+                                ? 'bg-emerald-500/20 text-emerald-400 cursor-default'
+                                : 'hover:opacity-90 cursor-pointer'
                             }`}
                           >
                             {alreadyInActive ? (
@@ -1375,8 +1384,8 @@ export default function App() {
                                 <span>{t.addBtn}</span>
                               </>
                             )}
-                          </span>
-                        </button>
+                          </button>
+                        </div>
                       );
                     })}
                   </>
